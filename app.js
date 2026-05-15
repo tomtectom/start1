@@ -139,11 +139,28 @@ function normalizeFlight(f) {
   return f;
 }
 
+const MONTHS = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',
+  JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
+
 function normalizeDate(d) {
-  let m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (!d) return d;
+  d = d.trim();
+  let m;
+  // YYYY-MM-DD already fine
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  // DD.MM.YYYY
+  m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // MM/DD/YYYY
   m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  // Lufthansa: 19SEP26 or 19SEP2026
+  m = d.match(/^(\d{1,2})([A-Za-z]{3})(\d{2}|\d{4})$/);
+  if (m) {
+    const mon = MONTHS[m[2].toUpperCase()];
+    const year = m[3].length === 2 ? '20' + m[3] : m[3];
+    if (mon) return `${year}-${mon}-${m[1].padStart(2,'0')}`;
+  }
   return d;
 }
 
@@ -154,22 +171,23 @@ function parseJSON(text) {
 }
 
 // ── Claude AI extraction ───────────────────────────────────────────────────
-const CLAUDE_PROMPT = `Analysiere dieses Dokument (Bordkarte, Buchungsbestätigung oder Flugticket) und extrahiere alle Flugdaten.
+const CLAUDE_PROMPT = `Analysiere dieses Dokument (Bordkarte, Reisebüro-Itinerary oder Flugticket) und extrahiere ALLE enthaltenen Flüge.
 
 Gib NUR ein gültiges JSON-Array zurück. Jedes Objekt kann folgende Felder haben:
-- date: Abflugdatum im Format YYYY-MM-DD
-- flight: Flugnummer (z.B. "LH400")
-- from: Abflughafen IATA-Code (3 Buchstaben, z.B. "FRA")
-- to: Zielflughafen IATA-Code (3 Buchstaben, z.B. "JFK")
+- date: Abflugdatum im Format YYYY-MM-DD (konvertiere z.B. "19SEP26" → "2026-09-19")
+- flight: Flugnummer ohne Sternchen (z.B. "LH442", nicht "LH442*")
+- from: Abflughafen als 3-buchstabiger IATA-Code (aus "Munich/MUC" → "MUC")
+- to: Zielflughafen als 3-buchstabiger IATA-Code (aus "Frankfurt/FRA" → "FRA")
 - dep: Abflugzeit HH:MM (24h)
-- arr: Ankunftszeit HH:MM (24h)
-- dur: Flugdauer (z.B. "9h 15m")
-- airline: Airline-Name
-- aircraft: Flugzeugtyp (z.B. "A380")
-- seat: Sitzplatz (z.B. "32A")
-- class: Kabinenklasse (Economy/Premium Economy/Business/First)
+- arr: Ankunftszeit HH:MM (24h, falls vorhanden)
+- dur: Flugdauer (z.B. "9h 15m", falls vorhanden)
+- airline: Airline-Name (aus Flugnummer ableiten falls nötig: LH=Lufthansa, UA=United, etc.)
+- aircraft: Flugzeugtyp falls vorhanden
+- seat: Sitzplatz falls vorhanden
+- class: Kabinenklasse ausschreiben – Fare-Klassen-Codes umrechnen: Z/Y/B/M/H/Q/V/W/S=Economy, C/J/D=Business, F/A=First, W/P=Premium Economy
 
-Nur Felder angeben die erkennbar sind. Gib [] zurück wenn keine Flugdaten gefunden. Nur das JSON-Array, kein anderer Text.`;
+Wichtig: Alle Flüge im Dokument erfassen, nicht nur den ersten!
+Nur das JSON-Array zurückgeben, kein anderer Text. [] wenn keine Flüge gefunden.`;
 
 async function extractWithClaudeText(text) {
   const key = getApiKey();
