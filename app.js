@@ -25,14 +25,34 @@ function toast(msg, type = '') {
   el.textContent = msg;
   el.className = 'toast show ' + type;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = 'toast'; }, 3000);
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
+}
+
+// ── Loading overlay ────────────────────────────────────────────────────────
+function showLoading(text = 'Wird verarbeitet…') {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// ── API Key ────────────────────────────────────────────────────────────────
+function getApiKey() { return localStorage.getItem('anthropicKey') || ''; }
+function setApiKey(k) { localStorage.setItem('anthropicKey', k); }
+
+function openApiKeyModal() {
+  document.getElementById('apiKeyInput').value = getApiKey();
+  document.getElementById('apiKeyBackdrop').style.display = 'flex';
+}
+function closeApiKeyModal() {
+  document.getElementById('apiKeyBackdrop').style.display = 'none';
 }
 
 // ── Duration helpers ───────────────────────────────────────────────────────
 function parseDurationMinutes(str) {
   if (!str) return 0;
   str = str.trim();
-  // formats: "9h 15m", "9:15", "9h15", "555", "9h", "15m"
   let m = str.match(/^(\d+)h\s*(\d+)m?$/i);
   if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
   m = str.match(/^(\d+):(\d+)$/);
@@ -58,7 +78,7 @@ function calcDuration(dep, arr) {
   const [dh, dm] = dep.split(':').map(Number);
   let [ah, am] = arr.split(':').map(Number);
   let mins = (ah * 60 + am) - (dh * 60 + dm);
-  if (mins < 0) mins += 24 * 60; // next day
+  if (mins < 0) mins += 24 * 60;
   return formatMinutes(mins);
 }
 
@@ -68,7 +88,7 @@ const COLUMN_MAP = {
   flugnummer: 'flight', flight: 'flight', 'flight number': 'flight', 'flight no': 'flight', flightnumber: 'flight',
   von: 'from', from: 'from', departure: 'from', origin: 'from', abflug: 'from', 'departure airport': 'from',
   nach: 'to', to: 'to', arrival: 'to', destination: 'to', ziel: 'to', 'arrival airport': 'to',
-  abflugzeit: 'dep', dep: 'dep', 'dep time': 'dep', 'departure time': 'dep', abflugzeit: 'dep',
+  abflugzeit: 'dep', dep: 'dep', 'dep time': 'dep', 'departure time': 'dep',
   ankunft: 'arr', arr: 'arr', 'arr time': 'arr', 'arrival time': 'arr', ankunftzeit: 'arr',
   dauer: 'dur', dur: 'dur', duration: 'dur', flugzeit: 'dur', 'flight time': 'dur',
   airline: 'airline',
@@ -87,7 +107,6 @@ function parseCSV(text) {
   const sep = lines[0].includes(';') ? ';' : ',';
   const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim());
   const colMap = headers.map(mapHeader);
-
   return lines.slice(1).filter(l => l.trim()).map(line => {
     const vals = splitCSVLine(line, sep);
     const f = { id: uid() };
@@ -112,25 +131,17 @@ function splitCSVLine(line, sep) {
 }
 
 function normalizeFlight(f) {
-  // Normalize date: accept DD.MM.YYYY, YYYY-MM-DD, MM/DD/YYYY
-  if (f.date) {
-    f.date = normalizeDate(f.date);
-  }
-  // Auto-calc duration if missing
-  if (!f.dur && f.dep && f.arr) {
-    f.dur = calcDuration(f.dep, f.arr);
-  }
-  // Uppercase airports
-  if (f.from) f.from = f.from.toUpperCase();
-  if (f.to) f.to = f.to.toUpperCase();
+  if (f.date) f.date = normalizeDate(f.date);
+  if (!f.dur && f.dep && f.arr) f.dur = calcDuration(f.dep, f.arr);
+  if (f.from) f.from = f.from.toUpperCase().slice(0, 4);
+  if (f.to) f.to = f.to.toUpperCase().slice(0, 4);
+  if (!f.id) f.id = uid();
   return f;
 }
 
 function normalizeDate(d) {
-  // DD.MM.YYYY
   let m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  // MM/DD/YYYY
   m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
   return d;
@@ -142,27 +153,199 @@ function parseJSON(text) {
   return arr.map(f => normalizeFlight({ ...f, id: f.id || uid() }));
 }
 
-// ── File handling ──────────────────────────────────────────────────────────
-function handleFile(file) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      let parsed;
-      if (file.name.endsWith('.json')) {
-        parsed = parseJSON(e.target.result);
-      } else {
-        parsed = parseCSV(e.target.result);
+// ── Claude AI extraction ───────────────────────────────────────────────────
+const CLAUDE_PROMPT = `Analysiere dieses Dokument (Bordkarte, Buchungsbestätigung oder Flugticket) und extrahiere alle Flugdaten.
+
+Gib NUR ein gültiges JSON-Array zurück. Jedes Objekt kann folgende Felder haben:
+- date: Abflugdatum im Format YYYY-MM-DD
+- flight: Flugnummer (z.B. "LH400")
+- from: Abflughafen IATA-Code (3 Buchstaben, z.B. "FRA")
+- to: Zielflughafen IATA-Code (3 Buchstaben, z.B. "JFK")
+- dep: Abflugzeit HH:MM (24h)
+- arr: Ankunftszeit HH:MM (24h)
+- dur: Flugdauer (z.B. "9h 15m")
+- airline: Airline-Name
+- aircraft: Flugzeugtyp (z.B. "A380")
+- seat: Sitzplatz (z.B. "32A")
+- class: Kabinenklasse (Economy/Premium Economy/Business/First)
+
+Nur Felder angeben die erkennbar sind. Gib [] zurück wenn keine Flugdaten gefunden. Nur das JSON-Array, kein anderer Text.`;
+
+async function extractWithClaude(base64, mediaType, label) {
+  const key = getApiKey();
+  if (!key) {
+    openApiKeyModal();
+    toast('Bitte zuerst API-Key eingeben', 'error');
+    return [];
+  }
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-allow-browser': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: CLAUDE_PROMPT }
+        ]
+      }]
+    })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    if (resp.status === 401) throw new Error('API-Key ungültig');
+    throw new Error(err.error?.message || `Fehler ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  const text = data.content?.[0]?.text || '[]';
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  return JSON.parse(match[0]);
+}
+
+// ── File to base64 ─────────────────────────────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── PDF → images via PDF.js ────────────────────────────────────────────────
+async function pdfToImages(file) {
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const images = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    images.push(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
+  }
+  return images;
+}
+
+// ── Handle individual file ─────────────────────────────────────────────────
+async function handleFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const type = file.type;
+
+  if (ext === 'csv' || type === 'text/csv' || type === 'application/csv') {
+    return handleTextFile(file, parseCSV);
+  }
+  if (ext === 'json' || type === 'application/json') {
+    return handleTextFile(file, parseJSON);
+  }
+  if (ext === 'pdf' || type === 'application/pdf') {
+    return handlePDFFile(file);
+  }
+  if (type.startsWith('image/')) {
+    return handleImageFile(file);
+  }
+  toast(`Format nicht unterstützt: ${file.name}`, 'error');
+}
+
+function handleTextFile(file, parser) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const parsed = parser(e.target.result);
+        if (!parsed.length) { toast('Keine Flüge in der Datei gefunden', 'error'); resolve([]); return; }
+        flights = [...flights, ...parsed];
+        save();
+        render();
+        toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} importiert`, 'success');
+        resolve(parsed);
+      } catch (err) {
+        toast('Fehler beim Einlesen: ' + err.message, 'error');
+        reject(err);
       }
-      if (!parsed.length) { toast('Keine Flüge gefunden', 'error'); return; }
-      flights = [...flights, ...parsed];
-      save();
-      render();
-      toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} importiert`, 'success');
-    } catch (err) {
-      toast('Fehler beim Einlesen: ' + err.message, 'error');
+    };
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+async function handleImageFile(file) {
+  showLoading(`KI liest "${file.name}" aus…`);
+  try {
+    const base64 = await fileToBase64(file);
+    const mediaType = file.type || 'image/jpeg';
+    const parsed = await extractWithClaude(base64, mediaType, file.name);
+    addExtractedFlights(parsed, file.name);
+  } catch (err) {
+    toast('Fehler: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function handlePDFFile(file) {
+  showLoading(`PDF wird geladen…`);
+  try {
+    const images = await pdfToImages(file);
+    let total = 0;
+    for (let i = 0; i < images.length; i++) {
+      showLoading(`KI liest Seite ${i + 1} von ${images.length}…`);
+      const parsed = await extractWithClaude(images[i], 'image/jpeg', file.name);
+      total += parsed.length;
+      if (parsed.length) {
+        const normalized = parsed.map(f => normalizeFlight(f));
+        flights = [...flights, ...normalized];
+      }
     }
-  };
-  reader.readAsText(file);
+    save();
+    render();
+    if (total > 0) {
+      toast(`${total} Flug${total !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
+    } else {
+      toast('Keine Flugdaten im PDF gefunden', 'error');
+    }
+  } catch (err) {
+    toast('Fehler: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function addExtractedFlights(parsed, filename) {
+  if (!parsed.length) {
+    toast(`Keine Flugdaten in "${filename}" erkannt`, 'error');
+    return;
+  }
+  const normalized = parsed.map(f => normalizeFlight(f));
+  flights = [...flights, ...normalized];
+  save();
+  render();
+  toast(`${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} erkannt`, 'success');
+}
+
+// ── Handle multiple files ──────────────────────────────────────────────────
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    await handleFile(file);
+  }
 }
 
 // ── Sorting ────────────────────────────────────────────────────────────────
@@ -170,10 +353,7 @@ function sortFlights(arr) {
   return [...arr].sort((a, b) => {
     let va = a[sortCol] || '';
     let vb = b[sortCol] || '';
-    if (sortCol === 'dur') {
-      va = parseDurationMinutes(va);
-      vb = parseDurationMinutes(vb);
-    }
+    if (sortCol === 'dur') { va = parseDurationMinutes(va); vb = parseDurationMinutes(vb); }
     if (va < vb) return sortDir === 'asc' ? -1 : 1;
     if (va > vb) return sortDir === 'asc' ? 1 : -1;
     return 0;
@@ -186,9 +366,7 @@ function filterFlights(arr) {
   if (filterYear) result = result.filter(f => (f.date || '').startsWith(filterYear));
   if (filterText) {
     const q = filterText.toLowerCase();
-    result = result.filter(f =>
-      Object.values(f).some(v => String(v).toLowerCase().includes(q))
-    );
+    result = result.filter(f => Object.values(f).some(v => String(v).toLowerCase().includes(q)));
   }
   return result;
 }
@@ -206,7 +384,7 @@ function renderStats() {
   `;
 }
 
-// ── Year filter options ────────────────────────────────────────────────────
+// ── Year filter ────────────────────────────────────────────────────────────
 function updateYearOptions() {
   const years = [...new Set(flights.map(f => (f.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
   const sel = document.getElementById('yearFilter');
@@ -223,7 +401,6 @@ function classBadge(cls) {
   return `<span class="badge ${key}">${cls}</span>`;
 }
 
-// ── Format display date ─────────────────────────────────────────────────────
 function fmtDate(d) {
   if (!d) return '';
   const dt = new Date(d + 'T00:00:00');
@@ -249,7 +426,6 @@ function renderTable() {
   emptyState.style.display = 'none';
   filterBar.style.display = 'flex';
   tableSection.style.display = '';
-
   updateYearOptions();
 
   tbody.innerHTML = visible.map(f => `
@@ -274,7 +450,6 @@ function renderTable() {
       ? `${visible.length} von ${flights.length} Flügen`
       : `${flights.length} Flug${flights.length !== 1 ? 'e' : ''}`;
 
-  // Sort header indicators
   document.querySelectorAll('thead th').forEach(th => {
     th.classList.remove('sort-asc', 'sort-desc');
     if (th.dataset.col === sortCol) th.classList.add('sort-' + sortDir);
@@ -327,13 +502,12 @@ dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('over');
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  handleFiles(e.dataTransfer.files);
 });
 dropZone.addEventListener('click', () => document.getElementById('fileInput').click());
 
 document.getElementById('fileInput').addEventListener('change', e => {
-  if (e.target.files[0]) handleFile(e.target.files[0]);
+  if (e.target.files.length) handleFiles(e.target.files);
   e.target.value = '';
 });
 
@@ -347,10 +521,8 @@ document.getElementById('modalBackdrop').addEventListener('click', e => {
 document.getElementById('flightForm').addEventListener('submit', e => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));
-  // Uppercase airports
   if (data.from) data.from = data.from.toUpperCase();
   if (data.to) data.to = data.to.toUpperCase();
-  // Auto-calc duration
   if (!data.dur && data.dep && data.arr) data.dur = calcDuration(data.dep, data.arr);
   if (editId) {
     const idx = flights.findIndex(f => f.id === editId);
@@ -375,7 +547,7 @@ document.getElementById('flightBody').addEventListener('click', e => {
     return;
   }
   const row = e.target.closest('tr[data-id]');
-  if (row && !e.target.closest('.delete-btn')) {
+  if (row) {
     const f = flights.find(f => f.id === row.dataset.id);
     if (f) openModal(f);
   }
@@ -383,7 +555,10 @@ document.getElementById('flightBody').addEventListener('click', e => {
 
 document.querySelectorAll('thead th.sortable').forEach(th => {
   th.addEventListener('click', () => {
-    if (sortCol === th.dataset.col) {
+    sortCol = th.dataset.col === sortCol && sortDir === 'asc' ? sortCol : th.dataset.col;
+    sortDir = th.dataset.col === sortCol && sortDir === 'asc' ? 'desc' : (th.dataset.col !== sortCol ? 'asc' : sortDir === 'asc' ? 'desc' : 'asc');
+    // simpler:
+    if (th.dataset.col === sortCol) {
       sortDir = sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       sortCol = th.dataset.col;
@@ -413,10 +588,37 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   toast('Alle Flüge gelöscht');
 });
 
-// Keyboard shortcut: Escape closes modal
+// API Key modal
+document.getElementById('apiKeyBtn').addEventListener('click', openApiKeyModal);
+document.getElementById('apiKeyClose').addEventListener('click', closeApiKeyModal);
+document.getElementById('apiKeyBackdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('apiKeyBackdrop')) closeApiKeyModal();
+});
+document.getElementById('apiKeySaveBtn').addEventListener('click', () => {
+  const val = document.getElementById('apiKeyInput').value.trim();
+  if (!val) { toast('Bitte API-Key eingeben', 'error'); return; }
+  setApiKey(val);
+  closeApiKeyModal();
+  toast('API-Key gespeichert', 'success');
+  updateApiKeyBtn();
+});
+document.getElementById('apiKeyClearBtn').addEventListener('click', () => {
+  localStorage.removeItem('anthropicKey');
+  document.getElementById('apiKeyInput').value = '';
+  toast('API-Key gelöscht');
+  updateApiKeyBtn();
+});
+
+function updateApiKeyBtn() {
+  const btn = document.getElementById('apiKeyBtn');
+  btn.textContent = getApiKey() ? '🔑 API-Key ✓' : '🔑 API-Key';
+  btn.style.color = getApiKey() ? 'var(--success)' : '';
+}
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closeApiKeyModal(); }
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
+updateApiKeyBtn();
 render();
