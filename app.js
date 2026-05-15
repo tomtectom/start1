@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = 'v1.6';
+const VERSION = 'v1.7';
 
 let flights = JSON.parse(localStorage.getItem('flights') || '[]');
 let editId = null;
@@ -138,8 +138,10 @@ function splitCSVLine(line, sep) {
 }
 
 function parseJSON(text) {
-  const data = JSON.parse(text);
-  const arr = Array.isArray(data) ? data : data.flights || [];
+  // Handle plain JSON array, {flights:[]} wrapper, or Claude API response text
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error('Kein JSON-Array gefunden');
+  const arr = JSON.parse(match[0]);
   return arr.map(f => normalizeFlight({ ...f, id: f.id || uid() }));
 }
 

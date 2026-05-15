@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shortcut einrichten – Flugtagebuch</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+      --border: #2e3250; --accent: #4f7cff; --text: #e8eaf6;
+      --muted: #8b90b8; --success: #3ddc97; --warn: #ffc84f;
+      --radius: 12px;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.6; padding-bottom: 60px; }
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+    header a { color: var(--muted); text-decoration: none; font-size: 13px; }
+    header a:hover { color: var(--text); }
+    h1 { font-size: 18px; font-weight: 700; }
+    main { max-width: 720px; margin: 0 auto; padding: 32px 20px; }
+    .intro { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 36px; }
+    .intro h2 { font-size: 16px; margin-bottom: 8px; color: var(--accent); }
+    .intro p { color: var(--muted); font-size: 14px; }
+    .flow { display: flex; gap: 0; align-items: flex-start; flex-wrap: wrap; margin-top: 20px; }
+    .flow-step { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 13px; color: var(--text); white-space: nowrap; }
+    .flow-arrow { color: var(--muted); padding: 10px 6px; font-size: 18px; }
+    .steps { display: flex; flex-direction: column; gap: 24px; }
+    .step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .step-header { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .step-title { font-size: 15px; font-weight: 600; }
+    .step-action { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .step-body { padding: 16px 20px; }
+    .step-body p { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
+    .step-body p:last-child { margin-bottom: 0; }
+    .search-badge { display: inline-block; background: #2c3250; border: 1px solid var(--accent); border-radius: 6px; padding: 2px 10px; font-size: 13px; color: var(--accent); font-family: monospace; }
+    .setting { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .setting:last-child { border-bottom: none; }
+    .setting-key { font-size: 13px; color: var(--muted); min-width: 160px; flex-shrink: 0; }
+    .setting-val { font-size: 13px; font-family: monospace; color: var(--text); word-break: break-all; }
+    .code { background: #0a0c12; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: monospace; font-size: 12px; color: #a8d8a8; overflow-x: auto; white-space: pre; margin: 12px 0; }
+    .tip { background: rgba(79,124,255,.1); border: 1px solid rgba(79,124,255,.3); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--text); margin: 12px 0; }
+    .tip strong { color: var(--accent); }
+    .warn-box { background: rgba(255,200,79,.08); border: 1px solid rgba(255,200,79,.3); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--warn); margin: 12px 0; }
+    .copy-btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer; float: right; margin-top: -2px; }
+    .copy-btn:active { opacity: .7; }
+    .final-box { background: var(--surface); border: 2px solid var(--success); border-radius: var(--radius); padding: 24px; margin-top: 36px; text-align: center; }
+    .final-box h3 { color: var(--success); font-size: 18px; margin-bottom: 8px; }
+    .final-box p { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+    .btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; border-radius: 8px; padding: 12px 28px; font-weight: 600; font-size: 15px; }
+    .header-items { display: flex; flex-direction: column; }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/">← Zurück zur App</a>
+  <div style="flex:1"></div>
+  <h1>✈ Shortcut einrichten</h1>
+</header>
+
+<main>
+
+  <div class="intro">
+    <h2>Wie funktioniert das?</h2>
+    <p>Der iOS-Kurzbefehl liest deine PDFs direkt auf dem iPad aus – ohne Browser-Einschränkungen. Er schickt den Text an Claude und speichert die Flugdaten als <strong style="color:var(--text)">flugimport.json</strong>. Diese Datei lädst du einfach in der Web-App hoch.</p>
+    <div class="flow">
+      <div class="flow-step">📄 PDFs auswählen</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">📝 Text lesen</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">🤖 Claude API</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">💾 JSON speichern</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">✈ Web-App</div>
+    </div>
+  </div>
+
+  <div class="steps">
+
+    <!-- Step 1 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <div class="header-items">
+          <div class="step-title">Neuen Kurzbefehl erstellen</div>
+          <div class="step-action">App: Kurzbefehle</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Öffne die <strong>Kurzbefehle</strong>-App → tippe oben rechts auf <strong>+</strong> → tippe auf "Neuer Kurzbefehl" oben und nenne ihn <strong>"Flüge importieren"</strong>.</p>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Dateien holen</div>
+          <div class="step-action">Suche nach: Dateien</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Suche in der Aktions-Bibliothek nach <span class="search-badge">Dateien</span> und wähle <strong>"Dateien"</strong> (nicht "Dateien holen").</p>
+        <p>In der Aktion einschalten: <strong>"Mehrere auswählen"</strong> → Ein</p>
+        <div class="tip"><strong>Tipp:</strong> Du siehst oben in der Aktion "Dateien holen" – tippe darauf um die Optionen zu sehen.</div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">3</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Mit jedem Objekt wiederholen</div>
+          <div class="step-action">Suche nach: Wiederholen</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Suche nach <span class="search-badge">Wiederholen</span> → wähle <strong>"Jedes Objekt wiederholen"</strong>.</p>
+        <p>Als Eingabe sollte automatisch "Dateien" aus Schritt 2 erkannt werden.</p>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">4</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Text aus PDF lesen (im Loop)</div>
+          <div class="step-action">Suche nach: PDF</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Diese Aktion kommt <strong>innerhalb</strong> der Wiederholen-Schleife.</p>
+        <p>Suche nach <span class="search-badge">PDF</span> → wähle <strong>"Text aus PDF holen"</strong>.</p>
+        <p>Die Eingabe ist automatisch das aktuelle Objekt (die aktuelle PDF-Datei im Loop).</p>
+        <div class="tip"><strong>Das ist die entscheidende Aktion</strong> – iOS liest PDFs nativ aus, ohne Browser-Einschränkung!</div>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">5</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Text zusammenstellen (im Loop)</div>
+          <div class="step-action">Suche nach: Text</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Suche nach <span class="search-badge">Text</span> → wähle <strong>"Text"</strong>.</p>
+        <p>Schreibe in das Textfeld folgendes (tippe auf die Variable-Taste {} um Variablen einzufügen):</p>
+        <div class="code" id="promptCode">Analysiere dieses Flugdokument und extrahiere ALLE Flüge.
+
+Gib NUR ein JSON-Array zurück, z.B.:
+[{"date":"2026-09-19","flight":"LH95","from":"MUC","to":"FRA","dep":"09:00","airline":"Lufthansa","class":"Economy"}]
+
+Felder: date (YYYY-MM-DD), flight, from (IATA), to (IATA), dep (HH:MM), arr (HH:MM), dur, airline, class.
+Datum 19SEP26 → 2026-09-19. Airport "Munich/MUC" → "MUC". Kein anderer Text, nur JSON.
+
+Dokumentinhalt:
+[Variable: Ausgegebener Text aus Schritt 4]</div>
+        <button class="copy-btn" onclick="copyPrompt()">Kopieren</button>
+        <div class="warn-box">Den letzten Teil "[Variable: Ausgegebener Text]" <strong>nicht</strong> als Text tippen – in Kurzbefehle auf <strong>{}</strong> → <strong>"Ausgegebener Text"</strong> tippen!</div>
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">6</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Claude API aufrufen (im Loop)</div>
+          <div class="step-action">Suche nach: Inhalt von URL</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Suche nach <span class="search-badge">Inhalt von URL</span> → wähle <strong>"Inhalt von URL holen"</strong>.</p>
+        <div class="setting">
+          <span class="setting-key">URL</span>
+          <span class="setting-val">https://api.anthropic.com/v1/messages</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">Methode</span>
+          <span class="setting-val">POST</span>
+        </div>
+        <p style="margin-top:12px">Tippe auf <strong>"Kopfzeilen"</strong> und füge diese 3 Einträge hinzu:</p>
+        <div class="setting">
+          <span class="setting-key">x-api-key</span>
+          <span class="setting-val">sk-ant-... (dein API Key)</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">anthropic-version</span>
+          <span class="setting-val">2023-06-01</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">content-type</span>
+          <span class="setting-val">application/json</span>
+        </div>
+        <p style="margin-top:12px">Tippe auf <strong>"Abfragetext"</strong> → wähle <strong>"JSON"</strong> → füge hinzu:</p>
+        <div class="setting">
+          <span class="setting-key">model</span>
+          <span class="setting-val">claude-haiku-4-5-20251001</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">max_tokens</span>
+          <span class="setting-val">2048 (als Zahl)</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">messages</span>
+          <span class="setting-val">Liste → Wörterbuch → role: "user", content: [Text aus Schritt 5]</span>
+        </div>
+        <div class="tip"><strong>Tipp:</strong> Bei "messages" tippe auf + → Wörterbuch → dann "role" = "user" und "content" = Variable aus Schritt 5 einfügen.</div>
+      </div>
+    </div>
+
+    <!-- Step 7 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">7</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Antwort extrahieren (im Loop)</div>
+          <div class="step-action">Suche nach: Wert für Schlüssel</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Füge <strong>2× "Wert für Schlüssel holen"</strong> ein:</p>
+        <p><strong>7a.</strong> Schlüssel: <code>content</code> – aus der API-Antwort (Schritt 6)</p>
+        <p><strong>7b.</strong> Danach: <strong>"Erstes Objekt"</strong> holen (suche nach "Erstes")</p>
+        <p><strong>7c.</strong> Danach: <strong>"Wert für Schlüssel"</strong>: <code>text</code></p>
+        <p>→ Das ist jetzt das JSON-Array mit den Flugdaten dieser PDF.</p>
+        <p>Speichere es in einer Variablen: <strong>"In Variable setzen"</strong> → Name: <strong>"Flug Ergebnis"</strong></p>
+      </div>
+    </div>
+
+    <!-- Step 8 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">8</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: In Datei speichern (nach dem Loop)</div>
+          <div class="step-action">Suche nach: In Datei sichern</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Diese Aktion kommt <strong>außerhalb</strong> der Schleife.</p>
+        <p>Suche nach <span class="search-badge">In Datei sichern</span>.</p>
+        <div class="setting">
+          <span class="setting-key">Eingabe</span>
+          <span class="setting-val">Variable "Flug Ergebnis"</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">Speicherort</span>
+          <span class="setting-val">Auf meinem iPad → z.B. Flights 2026</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">Dateiname</span>
+          <span class="setting-val">flugimport.json</span>
+        </div>
+        <div class="setting">
+          <span class="setting-key">Überschreiben</span>
+          <span class="setting-val">Ein</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 9 -->
+    <div class="step">
+      <div class="step-header">
+        <div class="step-num">9</div>
+        <div class="header-items">
+          <div class="step-title">Aktion: Mitteilung anzeigen</div>
+          <div class="step-action">Suche nach: Mitteilung</div>
+        </div>
+      </div>
+      <div class="step-body">
+        <p>Suche nach <span class="search-badge">Mitteilung</span> → Text: <strong>"Fertig! Öffne die Web-App und lade flugimport.json hoch."</strong></p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Final Box -->
+  <div class="final-box">
+    <h3>✅ Shortcut fertig!</h3>
+    <p>Starte den Shortcut → wähle deine PDFs aus dem Ordner "Flights 2026" → warte kurz → öffne die Web-App und lade die gespeicherte <strong>flugimport.json</strong> hoch.</p>
+    <a class="btn" href="/">Zur Web-App →</a>
+  </div>
+
+</main>
+
+<script>
+function copyPrompt() {
+  const text = `Analysiere dieses Flugdokument und extrahiere ALLE Flüge.
+
+Gib NUR ein JSON-Array zurück, z.B.:
+[{"date":"2026-09-19","flight":"LH95","from":"MUC","to":"FRA","dep":"09:00","airline":"Lufthansa","class":"Economy"}]
+
+Felder: date (YYYY-MM-DD), flight, from (IATA), to (IATA), dep (HH:MM), arr (HH:MM), dur, airline, class.
+Datum 19SEP26 -> 2026-09-19. Airport Munich/MUC -> MUC. Kein anderer Text, nur JSON.
+
+Dokumentinhalt:`;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Kopiert ✓';
+    setTimeout(() => btn.textContent = 'Kopieren', 2000);
+  });
+}
+</script>
+
+</body>
+</html>
