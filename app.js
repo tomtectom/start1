@@ -225,22 +225,23 @@ function fileToBase64(file) {
 
 // ── PDF → images via PDF.js ────────────────────────────────────────────────
 async function pdfToImages(file) {
-  const pdfjsLib = window['pdfjs-dist/build/pdf'];
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
+  const lib = window.pdfjsLib;
+  if (!lib) throw new Error('PDF-Bibliothek nicht geladen – bitte Seite neu laden');
+  lib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
   const images = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2 });
+    const viewport = page.getViewport({ scale: 2.5 });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    images.push(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
+    images.push(canvas.toDataURL('image/jpeg', 0.95).split(',')[1]);
   }
   return images;
 }
@@ -302,7 +303,7 @@ async function handleImageFile(file) {
 }
 
 async function handlePDFFile(file) {
-  showLoading(`PDF wird geladen…`);
+  showLoading('PDF wird gerendert…');
   try {
     const images = await pdfToImages(file);
     let total = 0;
@@ -320,10 +321,11 @@ async function handlePDFFile(file) {
     if (total > 0) {
       toast(`${total} Flug${total !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
     } else {
-      toast('Keine Flugdaten im PDF gefunden', 'error');
+      toast('Keine Flugdaten erkannt – versuch es als Foto/Screenshot', 'error');
     }
   } catch (err) {
-    toast('Fehler: ' + err.message, 'error');
+    console.error('PDF-Fehler:', err);
+    toast('PDF-Fehler: ' + err.message, 'error');
   } finally {
     hideLoading();
   }
