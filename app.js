@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = 'v1.4';
+const VERSION = 'v1.5';
 
 // ── State ──────────────────────────────────────────────────────────────────
 let flights = JSON.parse(localStorage.getItem('flights') || '[]');
@@ -190,7 +190,7 @@ function parseClaudeResponse(text) {
   return JSON.parse(match[0]);
 }
 
-async function claudeRequest(content) {
+async function claudeCall(content) {
   const key = requireApiKey();
   if (!key) return [];
 
@@ -201,7 +201,6 @@ async function claudeRequest(content) {
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
       'anthropic-dangerous-allow-browser': 'true',
-      'anthropic-beta': 'pdfs-2024-09-25',
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
@@ -218,6 +217,41 @@ async function claudeRequest(content) {
 
   const data = await resp.json();
   return parseClaudeResponse(data.content?.[0]?.text || '[]');
+}
+
+// ── PDF text extraction (no library, pure JS) ──────────────────────────────
+async function extractPDFText(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+
+  // Convert bytes to ASCII (keep printable chars only)
+  let raw = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i];
+    raw += (b >= 32 && b <= 126) ? String.fromCharCode(b) : ' ';
+  }
+
+  // Pull all PDF string literals (content between parentheses)
+  const strings = [];
+  let depth = 0, cur = '', inStr = false;
+  for (let i = 0; i < raw.length; i++) {
+    if (!inStr && raw[i] === '(') { inStr = true; depth = 1; cur = ''; continue; }
+    if (inStr) {
+      if (raw[i] === '\\') { cur += raw[++i] ?? ''; continue; }
+      if (raw[i] === '(')  { depth++; cur += '('; continue; }
+      if (raw[i] === ')') {
+        if (--depth === 0) {
+          inStr = false;
+          const t = cur.trim();
+          if (t.length > 1 && /[A-Za-z0-9]/.test(t)) strings.push(t);
+          cur = '';
+        } else { cur += ')'; }
+        continue;
+      }
+      cur += raw[i];
+    }
+  }
+  return strings.join(' ');
 }
 
 // ── File reading ───────────────────────────────────────────────────────────
@@ -267,7 +301,7 @@ async function handleImageFile(file) {
   showLoading('KI liest Bild aus…');
   try {
     const base64 = await fileToBase64(file);
-    const parsed = await claudeRequest([
+    const parsed = await claudeCall([
       { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } },
       { type: 'text', text: CLAUDE_PROMPT }
     ]);
@@ -282,18 +316,20 @@ async function handleImageFile(file) {
 }
 
 async function handlePDFFile(file) {
-  showLoading('PDF wird an KI gesendet…');
+  showLoading('PDF wird gelesen…');
   try {
-    const base64 = await fileToBase64(file);
-    // Send PDF directly to Claude – no PDF.js needed
-    const parsed = await claudeRequest([
-      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
-      { type: 'text', text: CLAUDE_PROMPT }
-    ]);
+    // Extract text directly from PDF binary – no library, works on all browsers
+    const text = await extractPDFText(file);
+    if (text.length < 30) {
+      toast('PDF nicht lesbar – bitte Screenshot als Foto hochladen', 'error');
+      return;
+    }
+    showLoading('KI analysiert PDF…');
+    const parsed = await claudeCall(CLAUDE_PROMPT + '\n\nDokumentinhalt:\n' + text);
     const normalized = parsed.map(f => normalizeFlight(f));
     addFlights(normalized);
     if (normalized.length) toast(`${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
-    else toast('Keine Flugdaten im PDF erkannt', 'error');
+    else toast('Keine Flugdaten erkannt', 'error');
   } catch (err) {
     toast('Fehler: ' + err.message, 'error');
   } finally {
