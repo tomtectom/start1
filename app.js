@@ -1,5 +1,7 @@
 'use strict';
 
+const VERSION = 'v1.4';
+
 // ── State ──────────────────────────────────────────────────────────────────
 let flights = JSON.parse(localStorage.getItem('flights') || '[]');
 let editId = null;
@@ -13,7 +15,6 @@ function save() {
   localStorage.setItem('flights', JSON.stringify(flights));
 }
 
-// ── ID ─────────────────────────────────────────────────────────────────────
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -28,7 +29,7 @@ function toast(msg, type = '') {
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
 }
 
-// ── Loading overlay ────────────────────────────────────────────────────────
+// ── Loading ────────────────────────────────────────────────────────────────
 function showLoading(text = 'Wird verarbeitet…') {
   document.getElementById('loadingText').textContent = text;
   document.getElementById('loadingOverlay').style.display = 'flex';
@@ -61,8 +62,6 @@ function parseDurationMinutes(str) {
   if (m) return parseInt(m[1]) * 60;
   m = str.match(/^(\d+)m$/i);
   if (m) return parseInt(m[1]);
-  m = str.match(/^(\d+)$/);
-  if (m) return parseInt(m[1]);
   return 0;
 }
 
@@ -70,7 +69,7 @@ function formatMinutes(mins) {
   if (!mins) return '';
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return h > 0 ? `${h}h ${m > 0 ? m + 'm' : ''}`.trim() : `${m}m`;
+  return h > 0 ? `${h}h${m > 0 ? ' ' + m + 'm' : ''}` : `${m}m`;
 }
 
 function calcDuration(dep, arr) {
@@ -82,31 +81,58 @@ function calcDuration(dep, arr) {
   return formatMinutes(mins);
 }
 
+// ── Date normalization ─────────────────────────────────────────────────────
+const MONTHS = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',
+  JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
+
+function normalizeDate(d) {
+  if (!d) return d;
+  d = d.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  let m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  // Lufthansa format: 19SEP26 / 19SEP2026
+  m = d.match(/^(\d{1,2})([A-Za-z]{3})(\d{2}|\d{4})$/);
+  if (m) {
+    const mon = MONTHS[m[2].toUpperCase()];
+    const year = m[3].length === 2 ? '20' + m[3] : m[3];
+    if (mon) return `${year}-${mon}-${m[1].padStart(2,'0')}`;
+  }
+  return d;
+}
+
+function normalizeFlight(f) {
+  if (f.date) f.date = normalizeDate(f.date);
+  if (!f.dur && f.dep && f.arr) f.dur = calcDuration(f.dep, f.arr);
+  if (f.from) f.from = f.from.toUpperCase().slice(0, 4).trim();
+  if (f.to)   f.to   = f.to.toUpperCase().slice(0, 4).trim();
+  if (!f.id)  f.id   = uid();
+  return f;
+}
+
 // ── CSV / JSON parsing ─────────────────────────────────────────────────────
 const COLUMN_MAP = {
   datum: 'date', date: 'date', 'departure date': 'date',
-  flugnummer: 'flight', flight: 'flight', 'flight number': 'flight', 'flight no': 'flight', flightnumber: 'flight',
-  von: 'from', from: 'from', departure: 'from', origin: 'from', abflug: 'from', 'departure airport': 'from',
+  flugnummer: 'flight', flight: 'flight', 'flight number': 'flight', flightnumber: 'flight',
+  von: 'from', from: 'from', departure: 'from', origin: 'from', 'departure airport': 'from',
   nach: 'to', to: 'to', arrival: 'to', destination: 'to', ziel: 'to', 'arrival airport': 'to',
-  abflugzeit: 'dep', dep: 'dep', 'dep time': 'dep', 'departure time': 'dep',
-  ankunft: 'arr', arr: 'arr', 'arr time': 'arr', 'arrival time': 'arr', ankunftzeit: 'arr',
+  abflugzeit: 'dep', dep: 'dep', 'departure time': 'dep',
+  ankunftzeit: 'arr', arr: 'arr', 'arrival time': 'arr',
   dauer: 'dur', dur: 'dur', duration: 'dur', flugzeit: 'dur', 'flight time': 'dur',
   airline: 'airline',
-  flugzeug: 'aircraft', aircraft: 'aircraft', plane: 'aircraft', 'aircraft type': 'aircraft',
+  flugzeug: 'aircraft', aircraft: 'aircraft', 'aircraft type': 'aircraft',
   sitz: 'seat', seat: 'seat',
   klasse: 'class', class: 'class', cabin: 'class',
 };
-
-function mapHeader(h) {
-  return COLUMN_MAP[h.toLowerCase().trim()] || null;
-}
 
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
   const sep = lines[0].includes(';') ? ';' : ',';
   const headers = lines[0].split(sep).map(h => h.replace(/^"|"$/g, '').trim());
-  const colMap = headers.map(mapHeader);
+  const colMap = headers.map(h => COLUMN_MAP[h.toLowerCase().trim()] || null);
   return lines.slice(1).filter(l => l.trim()).map(line => {
     const vals = splitCSVLine(line, sep);
     const f = { id: uid() };
@@ -118,9 +144,7 @@ function parseCSV(text) {
 }
 
 function splitCSVLine(line, sep) {
-  const result = [];
-  let cur = '';
-  let inQ = false;
+  const result = []; let cur = ''; let inQ = false;
   for (const ch of line) {
     if (ch === '"') { inQ = !inQ; continue; }
     if (ch === sep && !inQ) { result.push(cur); cur = ''; continue; }
@@ -130,140 +154,73 @@ function splitCSVLine(line, sep) {
   return result;
 }
 
-function normalizeFlight(f) {
-  if (f.date) f.date = normalizeDate(f.date);
-  if (!f.dur && f.dep && f.arr) f.dur = calcDuration(f.dep, f.arr);
-  if (f.from) f.from = f.from.toUpperCase().slice(0, 4);
-  if (f.to) f.to = f.to.toUpperCase().slice(0, 4);
-  if (!f.id) f.id = uid();
-  return f;
-}
-
-const MONTHS = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',
-  JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
-
-function normalizeDate(d) {
-  if (!d) return d;
-  d = d.trim();
-  let m;
-  // YYYY-MM-DD already fine
-  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-  // DD.MM.YYYY
-  m = d.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  // MM/DD/YYYY
-  m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  // Lufthansa: 19SEP26 or 19SEP2026
-  m = d.match(/^(\d{1,2})([A-Za-z]{3})(\d{2}|\d{4})$/);
-  if (m) {
-    const mon = MONTHS[m[2].toUpperCase()];
-    const year = m[3].length === 2 ? '20' + m[3] : m[3];
-    if (mon) return `${year}-${mon}-${m[1].padStart(2,'0')}`;
-  }
-  return d;
-}
-
 function parseJSON(text) {
   const data = JSON.parse(text);
   const arr = Array.isArray(data) ? data : data.flights || [];
   return arr.map(f => normalizeFlight({ ...f, id: f.id || uid() }));
 }
 
-// ── Claude AI extraction ───────────────────────────────────────────────────
+// ── Claude API ─────────────────────────────────────────────────────────────
 const CLAUDE_PROMPT = `Analysiere dieses Dokument (Bordkarte, Reisebüro-Itinerary oder Flugticket) und extrahiere ALLE enthaltenen Flüge.
 
 Gib NUR ein gültiges JSON-Array zurück. Jedes Objekt kann folgende Felder haben:
 - date: Abflugdatum im Format YYYY-MM-DD (konvertiere z.B. "19SEP26" → "2026-09-19")
-- flight: Flugnummer ohne Sternchen (z.B. "LH442", nicht "LH442*")
+- flight: Flugnummer ohne Sonderzeichen (z.B. "LH442", nicht "LH442*")
 - from: Abflughafen als 3-buchstabiger IATA-Code (aus "Munich/MUC" → "MUC")
 - to: Zielflughafen als 3-buchstabiger IATA-Code (aus "Frankfurt/FRA" → "FRA")
 - dep: Abflugzeit HH:MM (24h)
 - arr: Ankunftszeit HH:MM (24h, falls vorhanden)
 - dur: Flugdauer (z.B. "9h 15m", falls vorhanden)
-- airline: Airline-Name (aus Flugnummer ableiten falls nötig: LH=Lufthansa, UA=United, etc.)
+- airline: Airline-Name (aus Flugnummer ableiten: LH=Lufthansa, UA=United, BA=British Airways, etc.)
 - aircraft: Flugzeugtyp falls vorhanden
 - seat: Sitzplatz falls vorhanden
-- class: Kabinenklasse ausschreiben – Fare-Klassen-Codes umrechnen: Z/Y/B/M/H/Q/V/W/S=Economy, C/J/D=Business, F/A=First, W/P=Premium Economy
+- class: Kabinenklasse ausgeschrieben – Codes umrechnen: Z/Y/B/M/H/Q/V/S=Economy, C/J/D=Business, F/A=First, W/P=Premium Economy
 
-Wichtig: Alle Flüge im Dokument erfassen, nicht nur den ersten!
-Nur das JSON-Array zurückgeben, kein anderer Text. [] wenn keine Flüge gefunden.`;
+Alle Flüge erfassen, nicht nur den ersten! Nur das JSON-Array, kein anderer Text. [] wenn keine Flüge.`;
 
-async function extractWithClaudeText(text) {
+function requireApiKey() {
   const key = getApiKey();
-  if (!key) { openApiKeyModal(); toast('Bitte zuerst API-Key eingeben', 'error'); return []; }
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-allow-browser': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: CLAUDE_PROMPT + '\n\nDokument-Text:\n' + text }]
-    })
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    if (resp.status === 401) throw new Error('API-Key ungültig');
-    throw new Error(err.error?.message || `Fehler ${resp.status}`);
-  }
-
-  const data = await resp.json();
-  const raw = data.content?.[0]?.text || '[]';
-  const match = raw.match(/\[[\s\S]*\]/);
-  if (!match) return [];
-  return JSON.parse(match[0]);
+  if (!key) { openApiKeyModal(); toast('Bitte zuerst API-Key eingeben', 'error'); }
+  return key;
 }
 
-async function extractWithClaude(base64, mediaType, label) {
-  const key = getApiKey();
-  if (!key) {
-    openApiKeyModal();
-    toast('Bitte zuerst API-Key eingeben', 'error');
-    return [];
-  }
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-allow-browser': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-          { type: 'text', text: CLAUDE_PROMPT }
-        ]
-      }]
-    })
-  });
-
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    if (resp.status === 401) throw new Error('API-Key ungültig');
-    throw new Error(err.error?.message || `Fehler ${resp.status}`);
-  }
-
-  const data = await resp.json();
-  const text = data.content?.[0]?.text || '[]';
+function parseClaudeResponse(text) {
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) return [];
   return JSON.parse(match[0]);
 }
 
-// ── File to base64 ─────────────────────────────────────────────────────────
+async function claudeRequest(content) {
+  const key = requireApiKey();
+  if (!key) return [];
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-allow-browser': 'true',
+      'anthropic-beta': 'pdfs-2024-09-25',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content }]
+    })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    if (resp.status === 401) throw new Error('API-Key ungültig – bitte prüfen');
+    throw new Error(err.error?.message || `API-Fehler ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  return parseClaudeResponse(data.content?.[0]?.text || '[]');
+}
+
+// ── File reading ───────────────────────────────────────────────────────────
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -273,66 +230,16 @@ function fileToBase64(file) {
   });
 }
 
-// ── PDF.js init (use same file as worker to avoid CORS) ───────────────────
-function initPdfJs() {
-  const lib = window.pdfjsLib;
-  if (!lib) throw new Error('PDF-Bibliothek nicht geladen – bitte Seite neu laden');
-  if (!lib.GlobalWorkerOptions.workerSrc) {
-    lib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-  }
-  return lib;
-}
-
-// ── PDF → extracted text (for text-based PDFs like Lufthansa) ─────────────
-async function pdfToText(file) {
-  const lib = initPdfJs();
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
-  let text = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(item => item.str).join(' ') + '\n';
-  }
-  return text.trim();
-}
-
-// ── PDF → images (fallback for scanned PDFs) ──────────────────────────────
-async function pdfToImages(file) {
-  const lib = initPdfJs();
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
-  const images = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    images.push(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
-  }
-  return images;
-}
-
-// ── Handle individual file ─────────────────────────────────────────────────
+// ── File handlers ──────────────────────────────────────────────────────────
 async function handleFile(file) {
   const ext = file.name.split('.').pop().toLowerCase();
-  const type = file.type;
+  const type = file.type || '';
 
-  if (ext === 'csv' || type === 'text/csv' || type === 'application/csv') {
-    return handleTextFile(file, parseCSV);
-  }
-  if (ext === 'json' || type === 'application/json') {
-    return handleTextFile(file, parseJSON);
-  }
-  if (ext === 'pdf' || type === 'application/pdf') {
-    return handlePDFFile(file);
-  }
-  if (type.startsWith('image/')) {
-    return handleImageFile(file);
-  }
+  if (ext === 'csv' || type.includes('csv')) return handleTextFile(file, parseCSV);
+  if (ext === 'json' || type.includes('json')) return handleTextFile(file, parseJSON);
+  if (ext === 'pdf' || type === 'application/pdf') return handlePDFFile(file);
+  if (type.startsWith('image/')) return handleImageFile(file);
+
   toast(`Format nicht unterstützt: ${file.name}`, 'error');
 }
 
@@ -342,14 +249,12 @@ function handleTextFile(file, parser) {
     reader.onload = e => {
       try {
         const parsed = parser(e.target.result);
-        if (!parsed.length) { toast('Keine Flüge in der Datei gefunden', 'error'); resolve([]); return; }
-        flights = [...flights, ...parsed];
-        save();
-        render();
+        if (!parsed.length) { toast('Keine Flüge in der Datei gefunden', 'error'); return resolve([]); }
+        addFlights(parsed);
         toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} importiert`, 'success');
         resolve(parsed);
       } catch (err) {
-        toast('Fehler beim Einlesen: ' + err.message, 'error');
+        toast('Lesefehler: ' + err.message, 'error');
         reject(err);
       }
     };
@@ -359,12 +264,16 @@ function handleTextFile(file, parser) {
 }
 
 async function handleImageFile(file) {
-  showLoading(`KI liest "${file.name}" aus…`);
+  showLoading('KI liest Bild aus…');
   try {
     const base64 = await fileToBase64(file);
-    const mediaType = file.type || 'image/jpeg';
-    const parsed = await extractWithClaude(base64, mediaType, file.name);
-    addExtractedFlights(parsed, file.name);
+    const parsed = await claudeRequest([
+      { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } },
+      { type: 'text', text: CLAUDE_PROMPT }
+    ]);
+    addFlights(parsed.map(f => normalizeFlight(f)));
+    if (parsed.length) toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} erkannt`, 'success');
+    else toast('Keine Flugdaten im Bild erkannt', 'error');
   } catch (err) {
     toast('Fehler: ' + err.message, 'error');
   } finally {
@@ -373,87 +282,58 @@ async function handleImageFile(file) {
 }
 
 async function handlePDFFile(file) {
-  showLoading('PDF wird gelesen…');
+  showLoading('PDF wird an KI gesendet…');
   try {
-    // Try text extraction first (works for Lufthansa & most airline PDFs)
-    const text = await pdfToText(file);
-    let parsed = [];
-
-    if (text.length > 50) {
-      showLoading('KI analysiert PDF-Text…');
-      parsed = await extractWithClaudeText(text);
-    }
-
-    // Fallback: render as image if no text found (scanned PDFs)
-    if (!parsed.length) {
-      showLoading('Als Bild einlesen…');
-      const images = await pdfToImages(file);
-      for (let i = 0; i < images.length; i++) {
-        showLoading(`KI liest Seite ${i + 1} von ${images.length}…`);
-        const p = await extractWithClaude(images[i], 'image/jpeg', file.name);
-        parsed = [...parsed, ...p];
-      }
-    }
-
-    if (parsed.length) {
-      flights = [...flights, ...parsed.map(f => normalizeFlight(f))];
-      save();
-      render();
-      toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
-    } else {
-      toast('Keine Flugdaten erkannt – mach einen Screenshot und lade den hoch', 'error');
-    }
+    const base64 = await fileToBase64(file);
+    // Send PDF directly to Claude – no PDF.js needed
+    const parsed = await claudeRequest([
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+      { type: 'text', text: CLAUDE_PROMPT }
+    ]);
+    const normalized = parsed.map(f => normalizeFlight(f));
+    addFlights(normalized);
+    if (normalized.length) toast(`${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
+    else toast('Keine Flugdaten im PDF erkannt', 'error');
   } catch (err) {
-    console.error('PDF-Fehler:', err);
-    toast('PDF-Fehler: ' + err.message, 'error');
+    toast('Fehler: ' + err.message, 'error');
   } finally {
     hideLoading();
   }
 }
 
-function addExtractedFlights(parsed, filename) {
-  if (!parsed.length) {
-    toast(`Keine Flugdaten in "${filename}" erkannt`, 'error');
-    return;
-  }
-  const normalized = parsed.map(f => normalizeFlight(f));
-  flights = [...flights, ...normalized];
+function addFlights(list) {
+  if (!list.length) return;
+  flights = [...flights, ...list];
   save();
   render();
-  toast(`${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} erkannt`, 'success');
 }
 
-// ── Handle multiple files ──────────────────────────────────────────────────
 async function handleFiles(fileList) {
-  for (const file of fileList) {
-    await handleFile(file);
-  }
+  for (const file of fileList) await handleFile(file);
 }
 
-// ── Sorting ────────────────────────────────────────────────────────────────
+// ── Sorting & filtering ────────────────────────────────────────────────────
 function sortFlights(arr) {
   return [...arr].sort((a, b) => {
-    let va = a[sortCol] || '';
-    let vb = b[sortCol] || '';
-    if (sortCol === 'dur') { va = parseDurationMinutes(va); vb = parseDurationMinutes(vb); }
+    let va = sortCol === 'dur' ? parseDurationMinutes(a[sortCol]) : (a[sortCol] || '');
+    let vb = sortCol === 'dur' ? parseDurationMinutes(b[sortCol]) : (b[sortCol] || '');
     if (va < vb) return sortDir === 'asc' ? -1 : 1;
     if (va > vb) return sortDir === 'asc' ? 1 : -1;
     return 0;
   });
 }
 
-// ── Filter ─────────────────────────────────────────────────────────────────
 function filterFlights(arr) {
-  let result = arr;
-  if (filterYear) result = result.filter(f => (f.date || '').startsWith(filterYear));
+  let res = arr;
+  if (filterYear) res = res.filter(f => (f.date || '').startsWith(filterYear));
   if (filterText) {
     const q = filterText.toLowerCase();
-    result = result.filter(f => Object.values(f).some(v => String(v).toLowerCase().includes(q)));
+    res = res.filter(f => Object.values(f).some(v => String(v).toLowerCase().includes(q)));
   }
-  return result;
+  return res;
 }
 
-// ── Stats ──────────────────────────────────────────────────────────────────
+// ── Render ─────────────────────────────────────────────────────────────────
 function renderStats() {
   const el = document.getElementById('stats');
   if (!flights.length) { el.innerHTML = ''; return; }
@@ -466,7 +346,6 @@ function renderStats() {
   `;
 }
 
-// ── Year filter ────────────────────────────────────────────────────────────
 function updateYearOptions() {
   const years = [...new Set(flights.map(f => (f.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
   const sel = document.getElementById('yearFilter');
@@ -475,10 +354,9 @@ function updateYearOptions() {
   if (years.includes(cur)) sel.value = cur;
 }
 
-// ── Class badge ────────────────────────────────────────────────────────────
 function classBadge(cls) {
   if (!cls) return '';
-  const map = { 'economy': 'eco', 'business': 'bus', 'first': 'fst', 'premium economy': 'pre' };
+  const map = { economy: 'eco', business: 'bus', first: 'fst', 'premium economy': 'pre' };
   const key = map[cls.toLowerCase()] || '';
   return `<span class="badge ${key}">${cls}</span>`;
 }
@@ -486,17 +364,14 @@ function classBadge(cls) {
 function fmtDate(d) {
   if (!d) return '';
   const dt = new Date(d + 'T00:00:00');
-  if (isNaN(dt)) return d;
-  return dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return isNaN(dt) ? d : dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-// ── Table ──────────────────────────────────────────────────────────────────
 function renderTable() {
-  const tbody = document.getElementById('flightBody');
   const visible = sortFlights(filterFlights(flights));
   const tableSection = document.getElementById('tableSection');
-  const emptyState = document.getElementById('emptyState');
-  const filterBar = document.getElementById('filterBar');
+  const emptyState  = document.getElementById('emptyState');
+  const filterBar   = document.getElementById('filterBar');
 
   if (!flights.length) {
     tableSection.style.display = 'none';
@@ -510,7 +385,7 @@ function renderTable() {
   tableSection.style.display = '';
   updateYearOptions();
 
-  tbody.innerHTML = visible.map(f => `
+  document.getElementById('flightBody').innerHTML = visible.map(f => `
     <tr data-id="${f.id}">
       <td class="muted">${fmtDate(f.date)}</td>
       <td class="muted">${f.flight || ''}</td>
@@ -524,8 +399,7 @@ function renderTable() {
       <td class="muted">${f.seat || ''}</td>
       <td>${classBadge(f.class)}</td>
       <td><button class="delete-btn" data-id="${f.id}" title="Löschen">✕</button></td>
-    </tr>
-  `).join('');
+    </tr>`).join('');
 
   document.getElementById('tableCount').textContent =
     visible.length !== flights.length
@@ -538,23 +412,15 @@ function renderTable() {
   });
 }
 
-function render() {
-  renderStats();
-  renderTable();
-}
+function render() { renderStats(); renderTable(); }
 
-// ── Modal ──────────────────────────────────────────────────────────────────
+// ── Flight modal ───────────────────────────────────────────────────────────
 function openModal(flight = null) {
   editId = flight ? flight.id : null;
   const form = document.getElementById('flightForm');
   document.getElementById('modalTitle').textContent = flight ? 'Flug bearbeiten' : 'Flug hinzufügen';
   form.reset();
-  if (flight) {
-    Object.entries(flight).forEach(([k, v]) => {
-      const el = form.elements[k];
-      if (el) el.value = v;
-    });
-  }
+  if (flight) Object.entries(flight).forEach(([k, v]) => { const el = form.elements[k]; if (el) el.value = v; });
   document.getElementById('modalBackdrop').style.display = 'flex';
   form.querySelector('input[name="date"]').focus();
 }
@@ -567,25 +433,20 @@ function closeModal() {
 // ── Export ─────────────────────────────────────────────────────────────────
 function exportCSV() {
   const cols = ['date','flight','from','to','dep','arr','dur','airline','aircraft','seat','class'];
-  const headers = ['Datum','Flugnummer','Von','Nach','Abflug','Ankunft','Dauer','Airline','Flugzeug','Sitz','Klasse'];
-  const rows = [headers.join(';'), ...flights.map(f => cols.map(c => f[c] || '').join(';'))];
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `flugtagebuch_${new Date().toISOString().slice(0,10)}.csv`;
+  const hdrs = ['Datum','Flugnummer','Von','Nach','Abflug','Ankunft','Dauer','Airline','Flugzeug','Sitz','Klasse'];
+  const rows = [hdrs.join(';'), ...flights.map(f => cols.map(c => f[c] || '').join(';'))];
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' })),
+    download: `flugtagebuch_${new Date().toISOString().slice(0,10)}.csv`
+  });
   a.click();
 }
 
 // ── Events ─────────────────────────────────────────────────────────────────
 const dropZone = document.getElementById('dropZone');
-
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('over');
-  handleFiles(e.dataTransfer.files);
-});
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); handleFiles(e.dataTransfer.files); });
 dropZone.addEventListener('click', () => document.getElementById('fileInput').click());
 
 document.getElementById('fileInput').addEventListener('change', e => {
@@ -604,7 +465,7 @@ document.getElementById('flightForm').addEventListener('submit', e => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));
   if (data.from) data.from = data.from.toUpperCase();
-  if (data.to) data.to = data.to.toUpperCase();
+  if (data.to)   data.to   = data.to.toUpperCase();
   if (!data.dur && data.dep && data.arr) data.dur = calcDuration(data.dep, data.arr);
   if (editId) {
     const idx = flights.findIndex(f => f.id === editId);
@@ -612,9 +473,7 @@ document.getElementById('flightForm').addEventListener('submit', e => {
   } else {
     flights.push({ id: uid(), ...data });
   }
-  save();
-  render();
-  closeModal();
+  save(); render(); closeModal();
   toast(editId ? 'Flug aktualisiert' : 'Flug gespeichert', 'success');
 });
 
@@ -623,54 +482,29 @@ document.getElementById('flightBody').addEventListener('click', e => {
   if (del) {
     if (!confirm('Flug löschen?')) return;
     flights = flights.filter(f => f.id !== del.dataset.id);
-    save();
-    render();
-    toast('Flug gelöscht');
+    save(); render(); toast('Flug gelöscht');
     return;
   }
   const row = e.target.closest('tr[data-id]');
-  if (row) {
-    const f = flights.find(f => f.id === row.dataset.id);
-    if (f) openModal(f);
-  }
+  if (row) { const f = flights.find(f => f.id === row.dataset.id); if (f) openModal(f); }
 });
 
 document.querySelectorAll('thead th.sortable').forEach(th => {
   th.addEventListener('click', () => {
-    sortCol = th.dataset.col === sortCol && sortDir === 'asc' ? sortCol : th.dataset.col;
-    sortDir = th.dataset.col === sortCol && sortDir === 'asc' ? 'desc' : (th.dataset.col !== sortCol ? 'asc' : sortDir === 'asc' ? 'desc' : 'asc');
-    // simpler:
-    if (th.dataset.col === sortCol) {
-      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortCol = th.dataset.col;
-      sortDir = 'asc';
-    }
+    if (th.dataset.col === sortCol) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortCol = th.dataset.col; sortDir = 'asc'; }
     render();
   });
 });
 
-document.getElementById('searchInput').addEventListener('input', e => {
-  filterText = e.target.value;
-  renderTable();
-});
-
-document.getElementById('yearFilter').addEventListener('change', e => {
-  filterYear = e.target.value;
-  renderTable();
-});
-
+document.getElementById('searchInput').addEventListener('input', e => { filterText = e.target.value; renderTable(); });
+document.getElementById('yearFilter').addEventListener('change', e => { filterYear = e.target.value; renderTable(); });
 document.getElementById('exportBtn').addEventListener('click', exportCSV);
-
 document.getElementById('clearBtn').addEventListener('click', () => {
   if (!confirm(`Alle ${flights.length} Flüge wirklich löschen?`)) return;
-  flights = [];
-  save();
-  render();
-  toast('Alle Flüge gelöscht');
+  flights = []; save(); render(); toast('Alle Flüge gelöscht');
 });
 
-// API Key modal
 document.getElementById('apiKeyBtn').addEventListener('click', openApiKeyModal);
 document.getElementById('apiKeyClose').addEventListener('click', closeApiKeyModal);
 document.getElementById('apiKeyBackdrop').addEventListener('click', e => {
@@ -679,16 +513,13 @@ document.getElementById('apiKeyBackdrop').addEventListener('click', e => {
 document.getElementById('apiKeySaveBtn').addEventListener('click', () => {
   const val = document.getElementById('apiKeyInput').value.trim();
   if (!val) { toast('Bitte API-Key eingeben', 'error'); return; }
-  setApiKey(val);
-  closeApiKeyModal();
-  toast('API-Key gespeichert', 'success');
-  updateApiKeyBtn();
+  setApiKey(val); closeApiKeyModal();
+  toast('API-Key gespeichert', 'success'); updateApiKeyBtn();
 });
 document.getElementById('apiKeyClearBtn').addEventListener('click', () => {
   localStorage.removeItem('anthropicKey');
   document.getElementById('apiKeyInput').value = '';
-  toast('API-Key gelöscht');
-  updateApiKeyBtn();
+  toast('API-Key gelöscht'); updateApiKeyBtn();
 });
 
 function updateApiKeyBtn() {
@@ -697,10 +528,9 @@ function updateApiKeyBtn() {
   btn.style.color = getApiKey() ? 'var(--success)' : '';
 }
 
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); closeApiKeyModal(); }
-});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeApiKeyModal(); } });
 
 // ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById('version').textContent = VERSION;
 updateApiKeyBtn();
 render();

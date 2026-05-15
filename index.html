@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Flugtagebuch</title>
   <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
   <header>
     <div class="header-inner">
-      <div class="logo">✈ Flugtagebuch</div>
+      <div class="logo">
+        ✈ Flugtagebuch
+        <span class="version-badge" id="version"></span>
+      </div>
       <div class="header-right">
         <div class="stats" id="stats"></div>
         <button class="btn-key" id="apiKeyBtn" title="API-Key einrichten">🔑 API-Key</button>
@@ -23,16 +25,16 @@
     <section class="drop-section">
       <div class="drop-zone" id="dropZone">
         <div class="drop-icon">📂</div>
-        <p class="drop-title">Bordkarte, PDF oder CSV hierher ziehen</p>
+        <p class="drop-title">Bordkarte, PDF oder Foto hierher</p>
         <p class="drop-sub">oder <label class="file-link" for="fileInput">Datei auswählen</label></p>
-        <input type="file" id="fileInput" accept=".csv,.json,.pdf,image/*" hidden multiple />
+        <input type="file" id="fileInput" accept=".pdf,.csv,.json,image/*" hidden multiple />
         <div class="drop-badges">
           <span class="format-badge ai">🤖 Foto / Scan</span>
           <span class="format-badge ai">📄 PDF</span>
           <span class="format-badge">📊 CSV</span>
           <span class="format-badge">{ } JSON</span>
         </div>
-        <p class="drop-hint">Fotos & PDFs werden per KI ausgelesen · CSV/JSON direkt importiert</p>
+        <p class="drop-hint">Fotos &amp; PDFs werden per KI ausgelesen · CSV/JSON direkt importiert</p>
       </div>
       <button class="btn-primary" id="addBtn">+ Flug hinzufügen</button>
     </section>
@@ -88,7 +90,7 @@
 
   <!-- Flight Modal -->
   <div class="modal-backdrop" id="modalBackdrop" style="display:none">
-    <div class="modal" id="modal">
+    <div class="modal">
       <div class="modal-header">
         <h2 id="modalTitle">Flug hinzufügen</h2>
         <button class="modal-close" id="modalClose">✕</button>
@@ -123,7 +125,7 @@
         </div>
         <div class="form-actions">
           <button type="button" class="btn-ghost" id="modalCancelBtn">Abbrechen</button>
-          <button type="submit" class="btn-primary" id="modalSaveBtn">Speichern</button>
+          <button type="submit" class="btn-primary">Speichern</button>
         </div>
       </form>
     </div>
@@ -131,18 +133,16 @@
 
   <!-- API Key Modal -->
   <div class="modal-backdrop" id="apiKeyBackdrop" style="display:none">
-    <div class="modal" id="apiKeyModal">
+    <div class="modal">
       <div class="modal-header">
         <h2>🔑 Anthropic API-Key</h2>
         <button class="modal-close" id="apiKeyClose">✕</button>
       </div>
       <div class="modal-body">
-        <p class="api-info">Der API-Key wird benötigt um Fotos und PDFs per KI auszulesen. Er wird nur lokal in deinem Browser gespeichert und nirgendwo hochgeladen.</p>
+        <p class="api-info">Wird benötigt um Fotos und PDFs per KI auszulesen. Wird nur lokal in deinem Browser gespeichert.</p>
         <p class="api-info">Kostenlos registrieren: <strong>console.anthropic.com</strong></p>
         <div class="form-row" style="margin-top:16px">
-          <label>API-Key
-            <input type="password" id="apiKeyInput" placeholder="sk-ant-…" autocomplete="off" />
-          </label>
+          <label>API-Key<input type="password" id="apiKeyInput" placeholder="sk-ant-…" autocomplete="off" /></label>
         </div>
         <div class="form-actions">
           <button class="btn-ghost" id="apiKeyClearBtn">Löschen</button>
