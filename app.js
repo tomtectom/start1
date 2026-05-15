@@ -171,6 +171,38 @@ Gib NUR ein gültiges JSON-Array zurück. Jedes Objekt kann folgende Felder habe
 
 Nur Felder angeben die erkennbar sind. Gib [] zurück wenn keine Flugdaten gefunden. Nur das JSON-Array, kein anderer Text.`;
 
+async function extractWithClaudeText(text) {
+  const key = getApiKey();
+  if (!key) { openApiKeyModal(); toast('Bitte zuerst API-Key eingeben', 'error'); return []; }
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-allow-browser': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: CLAUDE_PROMPT + '\n\nDokument-Text:\n' + text }]
+    })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    if (resp.status === 401) throw new Error('API-Key ungültig');
+    throw new Error(err.error?.message || `Fehler ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  const raw = data.content?.[0]?.text || '[]';
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  return JSON.parse(match[0]);
+}
+
 async function extractWithClaude(base64, mediaType, label) {
   const key = getApiKey();
   if (!key) {
@@ -223,25 +255,45 @@ function fileToBase64(file) {
   });
 }
 
-// ── PDF → images via PDF.js ────────────────────────────────────────────────
-async function pdfToImages(file) {
+// ── PDF.js init (use same file as worker to avoid CORS) ───────────────────
+function initPdfJs() {
   const lib = window.pdfjsLib;
   if (!lib) throw new Error('PDF-Bibliothek nicht geladen – bitte Seite neu laden');
-  lib.GlobalWorkerOptions.workerSrc =
-    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  if (!lib.GlobalWorkerOptions.workerSrc) {
+    lib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  }
+  return lib;
+}
 
+// ── PDF → extracted text (for text-based PDFs like Lufthansa) ─────────────
+async function pdfToText(file) {
+  const lib = initPdfJs();
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(item => item.str).join(' ') + '\n';
+  }
+  return text.trim();
+}
+
+// ── PDF → images (fallback for scanned PDFs) ──────────────────────────────
+async function pdfToImages(file) {
+  const lib = initPdfJs();
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
   const images = [];
-
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 2.5 });
+    const viewport = page.getViewport({ scale: 2.0 });
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    images.push(canvas.toDataURL('image/jpeg', 0.95).split(',')[1]);
+    images.push(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
   }
   return images;
 }
@@ -303,25 +355,35 @@ async function handleImageFile(file) {
 }
 
 async function handlePDFFile(file) {
-  showLoading('PDF wird gerendert…');
+  showLoading('PDF wird gelesen…');
   try {
-    const images = await pdfToImages(file);
-    let total = 0;
-    for (let i = 0; i < images.length; i++) {
-      showLoading(`KI liest Seite ${i + 1} von ${images.length}…`);
-      const parsed = await extractWithClaude(images[i], 'image/jpeg', file.name);
-      total += parsed.length;
-      if (parsed.length) {
-        const normalized = parsed.map(f => normalizeFlight(f));
-        flights = [...flights, ...normalized];
+    // Try text extraction first (works for Lufthansa & most airline PDFs)
+    const text = await pdfToText(file);
+    let parsed = [];
+
+    if (text.length > 50) {
+      showLoading('KI analysiert PDF-Text…');
+      parsed = await extractWithClaudeText(text);
+    }
+
+    // Fallback: render as image if no text found (scanned PDFs)
+    if (!parsed.length) {
+      showLoading('Als Bild einlesen…');
+      const images = await pdfToImages(file);
+      for (let i = 0; i < images.length; i++) {
+        showLoading(`KI liest Seite ${i + 1} von ${images.length}…`);
+        const p = await extractWithClaude(images[i], 'image/jpeg', file.name);
+        parsed = [...parsed, ...p];
       }
     }
-    save();
-    render();
-    if (total > 0) {
-      toast(`${total} Flug${total !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
+
+    if (parsed.length) {
+      flights = [...flights, ...parsed.map(f => normalizeFlight(f))];
+      save();
+      render();
+      toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
     } else {
-      toast('Keine Flugdaten erkannt – versuch es als Foto/Screenshot', 'error');
+      toast('Keine Flugdaten erkannt – mach einen Screenshot und lade den hoch', 'error');
     }
   } catch (err) {
     console.error('PDF-Fehler:', err);
