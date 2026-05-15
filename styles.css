@@ -24,7 +24,6 @@ body {
   min-height: 100vh;
 }
 
-/* ── Header ── */
 header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -80,9 +79,7 @@ header {
   white-space: nowrap;
 }
 .btn-key:hover { border-color: var(--accent); color: var(--text); }
-.stat-item {
-  text-align: right;
-}
+.stat-item { text-align: right; }
 .stat-value {
   font-size: 16px;
   font-weight: 700;
@@ -95,14 +92,12 @@ header {
   letter-spacing: .5px;
 }
 
-/* ── Main ── */
 main {
   max-width: 1400px;
   margin: 0 auto;
   padding: 32px 24px 64px;
 }
 
-/* ── Drop Zone ── */
 .drop-section {
   display: flex;
   flex-direction: column;
@@ -180,7 +175,6 @@ main {
 }
 .btn-pdf:hover { border-color: var(--accent); background: rgba(79,124,255,.1); color: var(--accent); }
 
-/* ── File Queue ── */
 .queue-section {
   width: 100%;
   max-width: 640px;
@@ -216,9 +210,7 @@ main {
   line-height: 1;
 }
 .queue-close:hover { background: var(--border); color: var(--text); }
-.queue-list {
-  list-style: none;
-}
+.queue-list { list-style: none; }
 .queue-item {
   display: flex;
   align-items: center;
@@ -251,7 +243,6 @@ main {
 .queue-item-status.done { color: var(--success); }
 .queue-item-status.error { color: var(--danger); }
 
-/* ── API Key info ── */
 .api-info {
   color: var(--text-muted);
   font-size: 13px;
@@ -259,7 +250,6 @@ main {
   margin-bottom: 8px;
 }
 
-/* ── Buttons ── */
 .btn-primary {
   background: var(--accent);
   color: #fff;
@@ -287,7 +277,6 @@ main {
 .btn-ghost.danger { color: var(--danger); border-color: var(--danger); }
 .btn-ghost.danger:hover { background: rgba(255,79,106,.1); }
 
-/* ── Filter Bar ── */
 .filter-bar {
   display: flex;
   gap: 10px;
@@ -310,7 +299,6 @@ main {
 .filter-bar input[type="text"]:focus,
 .filter-bar select:focus { border-color: var(--accent); }
 
-/* ── Table ── */
 .table-wrap {
   overflow-x: auto;
   border-radius: var(--radius);
@@ -387,7 +375,6 @@ tbody td.muted { color: var(--text-muted); }
   text-align: right;
 }
 
-/* ── Empty State ── */
 .empty-state {
   text-align: center;
   padding: 80px 20px;
@@ -395,7 +382,6 @@ tbody td.muted { color: var(--text-muted); }
 }
 .empty-icon { font-size: 56px; margin-bottom: 16px; }
 
-/* ── Modal ── */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -472,7 +458,6 @@ tbody td.muted { color: var(--text-muted); }
   margin-top: 20px;
 }
 
-/* ── Toast ── */
 .toast {
   position: fixed;
   bottom: 24px;
@@ -497,7 +482,6 @@ tbody td.muted { color: var(--text-muted); }
 .toast.success { border-color: var(--success); color: var(--success); }
 .toast.error { border-color: var(--danger); color: var(--danger); }
 
-/* ── Responsive ── */
 @media (max-width: 640px) {
   .stats { gap: 12px; }
   .stat-value { font-size: 14px; }

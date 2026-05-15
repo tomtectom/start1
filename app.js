@@ -1,8 +1,7 @@
 'use strict';
 
-const VERSION = 'v1.5';
+const VERSION = 'v1.6';
 
-// ── State ──────────────────────────────────────────────────────────────────
 let flights = JSON.parse(localStorage.getItem('flights') || '[]');
 let editId = null;
 let sortCol = 'date';
@@ -10,7 +9,6 @@ let sortDir = 'desc';
 let filterText = '';
 let filterYear = '';
 
-// ── Persist ────────────────────────────────────────────────────────────────
 function save() {
   localStorage.setItem('flights', JSON.stringify(flights));
 }
@@ -19,7 +17,6 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg, type = '') {
   const el = document.getElementById('toast');
@@ -29,16 +26,6 @@ function toast(msg, type = '') {
   toastTimer = setTimeout(() => { el.className = 'toast'; }, 3500);
 }
 
-// ── Loading ────────────────────────────────────────────────────────────────
-function showLoading(text = 'Wird verarbeitet…') {
-  document.getElementById('loadingText').textContent = text;
-  document.getElementById('loadingOverlay').style.display = 'flex';
-}
-function hideLoading() {
-  document.getElementById('loadingOverlay').style.display = 'none';
-}
-
-// ── API Key ────────────────────────────────────────────────────────────────
 function getApiKey() { return localStorage.getItem('anthropicKey') || ''; }
 function setApiKey(k) { localStorage.setItem('anthropicKey', k); }
 
@@ -50,7 +37,6 @@ function closeApiKeyModal() {
   document.getElementById('apiKeyBackdrop').style.display = 'none';
 }
 
-// ── Duration helpers ───────────────────────────────────────────────────────
 function parseDurationMinutes(str) {
   if (!str) return 0;
   str = str.trim();
@@ -81,7 +67,6 @@ function calcDuration(dep, arr) {
   return formatMinutes(mins);
 }
 
-// ── Date normalization ─────────────────────────────────────────────────────
 const MONTHS = {JAN:'01',FEB:'02',MAR:'03',APR:'04',MAY:'05',JUN:'06',
   JUL:'07',AUG:'08',SEP:'09',OCT:'10',NOV:'11',DEC:'12'};
 
@@ -93,7 +78,6 @@ function normalizeDate(d) {
   if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
   m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  // Lufthansa format: 19SEP26 / 19SEP2026
   m = d.match(/^(\d{1,2})([A-Za-z]{3})(\d{2}|\d{4})$/);
   if (m) {
     const mon = MONTHS[m[2].toUpperCase()];
@@ -112,7 +96,6 @@ function normalizeFlight(f) {
   return f;
 }
 
-// ── CSV / JSON parsing ─────────────────────────────────────────────────────
 const COLUMN_MAP = {
   datum: 'date', date: 'date', 'departure date': 'date',
   flugnummer: 'flight', flight: 'flight', 'flight number': 'flight', flightnumber: 'flight',
@@ -160,7 +143,6 @@ function parseJSON(text) {
   return arr.map(f => normalizeFlight({ ...f, id: f.id || uid() }));
 }
 
-// ── Claude API ─────────────────────────────────────────────────────────────
 const CLAUDE_PROMPT = `Analysiere dieses Dokument (Bordkarte, Reisebüro-Itinerary oder Flugticket) und extrahiere ALLE enthaltenen Flüge.
 
 Gib NUR ein gültiges JSON-Array zurück. Jedes Objekt kann folgende Felder haben:
@@ -219,42 +201,23 @@ async function claudeCall(content) {
   return parseClaudeResponse(data.content?.[0]?.text || '[]');
 }
 
-// ── PDF text extraction (no library, pure JS) ──────────────────────────────
-async function extractPDFText(file) {
-  const buf = await file.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-
-  // Convert bytes to ASCII (keep printable chars only)
-  let raw = '';
-  for (let i = 0; i < bytes.length; i++) {
-    const b = bytes[i];
-    raw += (b >= 32 && b <= 126) ? String.fromCharCode(b) : ' ';
-  }
-
-  // Pull all PDF string literals (content between parentheses)
-  const strings = [];
-  let depth = 0, cur = '', inStr = false;
-  for (let i = 0; i < raw.length; i++) {
-    if (!inStr && raw[i] === '(') { inStr = true; depth = 1; cur = ''; continue; }
-    if (inStr) {
-      if (raw[i] === '\\') { cur += raw[++i] ?? ''; continue; }
-      if (raw[i] === '(')  { depth++; cur += '('; continue; }
-      if (raw[i] === ')') {
-        if (--depth === 0) {
-          inStr = false;
-          const t = cur.trim();
-          if (t.length > 1 && /[A-Za-z0-9]/.test(t)) strings.push(t);
-          cur = '';
-        } else { cur += ')'; }
-        continue;
-      }
-      cur += raw[i];
-    }
-  }
-  return strings.join(' ');
+function extractPDFText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const bin = e.target.result;
+      const chunks = bin.match(/[\x20-\x7E]{4,}/g) || [];
+      const text = chunks
+        .filter(s => /[A-Za-z0-9]/.test(s))
+        .join(' ')
+        .slice(0, 12000);
+      resolve(text);
+    };
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.readAsBinaryString(file);
+  });
 }
 
-// ── File reading ───────────────────────────────────────────────────────────
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -262,19 +225,6 @@ function fileToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-
-// ── File handlers ──────────────────────────────────────────────────────────
-async function handleFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  const type = file.type || '';
-
-  if (ext === 'csv' || type.includes('csv')) return handleTextFile(file, parseCSV);
-  if (ext === 'json' || type.includes('json')) return handleTextFile(file, parseJSON);
-  if (ext === 'pdf' || type === 'application/pdf') return handlePDFFile(file);
-  if (type.startsWith('image/')) return handleImageFile(file);
-
-  toast(`Format nicht unterstützt: ${file.name}`, 'error');
 }
 
 function handleTextFile(file, parser) {
@@ -298,43 +248,31 @@ function handleTextFile(file, parser) {
 }
 
 async function handleImageFile(file) {
-  showLoading('KI liest Bild aus…');
   try {
     const base64 = await fileToBase64(file);
     const parsed = await claudeCall([
       { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } },
       { type: 'text', text: CLAUDE_PROMPT }
     ]);
-    addFlights(parsed.map(f => normalizeFlight(f)));
-    if (parsed.length) toast(`${parsed.length} Flug${parsed.length !== 1 ? 'e' : ''} erkannt`, 'success');
-    else toast('Keine Flugdaten im Bild erkannt', 'error');
+    const normalized = parsed.map(f => normalizeFlight(f));
+    addFlights(normalized);
+    if (normalized.length) return { count: normalized.length };
+    throw new Error('Keine Flugdaten im Bild erkannt');
   } catch (err) {
-    toast('Fehler: ' + err.message, 'error');
-  } finally {
-    hideLoading();
+    throw err;
   }
 }
 
 async function handlePDFFile(file) {
-  showLoading('PDF wird gelesen…');
-  try {
-    // Extract text directly from PDF binary – no library, works on all browsers
-    const text = await extractPDFText(file);
-    if (text.length < 30) {
-      toast('PDF nicht lesbar – bitte Screenshot als Foto hochladen', 'error');
-      return;
-    }
-    showLoading('KI analysiert PDF…');
-    const parsed = await claudeCall(CLAUDE_PROMPT + '\n\nDokumentinhalt:\n' + text);
-    const normalized = parsed.map(f => normalizeFlight(f));
-    addFlights(normalized);
-    if (normalized.length) toast(`${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} aus PDF importiert`, 'success');
-    else toast('Keine Flugdaten erkannt', 'error');
-  } catch (err) {
-    toast('Fehler: ' + err.message, 'error');
-  } finally {
-    hideLoading();
+  const text = await extractPDFText(file);
+  if (text.length < 30) {
+    throw new Error('PDF nicht lesbar – bitte Screenshot als Foto hochladen');
   }
+  const parsed = await claudeCall([{ type: 'text', text: CLAUDE_PROMPT + '\n\nDokumentinhalt:\n' + text }]);
+  const normalized = parsed.map(f => normalizeFlight(f));
+  addFlights(normalized);
+  if (normalized.length) return { count: normalized.length };
+  throw new Error('Keine Flugdaten erkannt');
 }
 
 function addFlights(list) {
@@ -344,11 +282,91 @@ function addFlights(list) {
   render();
 }
 
-async function handleFiles(fileList) {
-  for (const file of fileList) await handleFile(file);
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-// ── Sorting & filtering ────────────────────────────────────────────────────
+function buildQueue(fileList) {
+  const items = Array.from(fileList).map((file, i) => ({ file, id: 'q' + i + uid(), status: 'pending' }));
+  const section = document.getElementById('queueSection');
+  const list = document.getElementById('queueList');
+  list.innerHTML = items.map(item => `
+    <li class="queue-item" id="${item.id}">
+      <span class="queue-item-name" title="${item.file.name}">${item.file.name}</span>
+      <span class="queue-item-size">${fmtSize(item.file.size)}</span>
+      <span class="queue-item-status pending">⏳ Ausstehend</span>
+    </li>`).join('');
+  section.style.display = '';
+  return items;
+}
+
+function setQueueItemStatus(id, status, label) {
+  const li = document.getElementById(id);
+  if (!li) return;
+  const span = li.querySelector('.queue-item-status');
+  span.className = 'queue-item-status ' + status;
+  span.textContent = label;
+}
+
+async function processQueue(fileList) {
+  if (!fileList || !fileList.length) return;
+
+  const key = requireApiKey();
+  const needsApi = Array.from(fileList).some(f => {
+    const ext = f.name.split('.').pop().toLowerCase();
+    return ext === 'pdf' || f.type.startsWith('image/');
+  });
+  if (needsApi && !key) return;
+
+  const items = buildQueue(fileList);
+  let doneCount = 0;
+  let errorCount = 0;
+  let totalFlights = 0;
+
+  for (const item of items) {
+    setQueueItemStatus(item.id, 'processing', '🔄 Wird verarbeitet…');
+    const ext = item.file.name.split('.').pop().toLowerCase();
+    const type = item.file.type || '';
+    try {
+      let result;
+      if (ext === 'csv' || type.includes('csv')) {
+        await handleTextFile(item.file, parseCSV);
+        result = { count: 0 };
+        setQueueItemStatus(item.id, 'done', '✅ Importiert');
+        doneCount++;
+      } else if (ext === 'json' || type.includes('json')) {
+        await handleTextFile(item.file, parseJSON);
+        result = { count: 0 };
+        setQueueItemStatus(item.id, 'done', '✅ Importiert');
+        doneCount++;
+      } else if (ext === 'pdf' || type === 'application/pdf') {
+        result = await handlePDFFile(item.file);
+        totalFlights += result.count || 0;
+        setQueueItemStatus(item.id, 'done', `✅ ${result.count} Flug${result.count !== 1 ? 'e' : ''}`);
+        doneCount++;
+      } else if (type.startsWith('image/')) {
+        result = await handleImageFile(item.file);
+        totalFlights += result.count || 0;
+        setQueueItemStatus(item.id, 'done', `✅ ${result.count} Flug${result.count !== 1 ? 'e' : ''}`);
+        doneCount++;
+      } else {
+        throw new Error('Format nicht unterstützt');
+      }
+    } catch (err) {
+      errorCount++;
+      setQueueItemStatus(item.id, 'error', '❌ ' + err.message);
+    }
+  }
+
+  const parts = [];
+  if (totalFlights > 0) parts.push(`${totalFlights} Flug${totalFlights !== 1 ? 'e' : ''} importiert`);
+  if (doneCount > 0 && totalFlights === 0) parts.push(`${doneCount} Datei${doneCount !== 1 ? 'en' : ''} verarbeitet`);
+  if (errorCount > 0) parts.push(`${errorCount} Fehler`);
+  if (parts.length) toast(parts.join(' · '), errorCount && !doneCount ? 'error' : 'success');
+}
+
 function sortFlights(arr) {
   return [...arr].sort((a, b) => {
     let va = sortCol === 'dur' ? parseDurationMinutes(a[sortCol]) : (a[sortCol] || '');
@@ -369,7 +387,6 @@ function filterFlights(arr) {
   return res;
 }
 
-// ── Render ─────────────────────────────────────────────────────────────────
 function renderStats() {
   const el = document.getElementById('stats');
   if (!flights.length) { el.innerHTML = ''; return; }
@@ -450,7 +467,6 @@ function renderTable() {
 
 function render() { renderStats(); renderTable(); }
 
-// ── Flight modal ───────────────────────────────────────────────────────────
 function openModal(flight = null) {
   editId = flight ? flight.id : null;
   const form = document.getElementById('flightForm');
@@ -466,7 +482,6 @@ function closeModal() {
   editId = null;
 }
 
-// ── Export ─────────────────────────────────────────────────────────────────
 function exportCSV() {
   const cols = ['date','flight','from','to','dep','arr','dur','airline','aircraft','seat','class'];
   const hdrs = ['Datum','Flugnummer','Von','Nach','Abflug','Ankunft','Dauer','Airline','Flugzeug','Sitz','Klasse'];
@@ -478,16 +493,38 @@ function exportCSV() {
   a.click();
 }
 
-// ── Events ─────────────────────────────────────────────────────────────────
+function updateApiKeyBtn() {
+  const btn = document.getElementById('apiKeyBtn');
+  btn.textContent = getApiKey() ? '🔑 API-Key ✓' : '🔑 API-Key';
+  btn.style.color = getApiKey() ? 'var(--success)' : '';
+}
+
 const dropZone = document.getElementById('dropZone');
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
-dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); handleFiles(e.dataTransfer.files); });
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('over');
+  processQueue(e.dataTransfer.files);
+});
 dropZone.addEventListener('click', () => document.getElementById('fileInput').click());
 
 document.getElementById('fileInput').addEventListener('change', e => {
-  if (e.target.files.length) handleFiles(e.target.files);
+  if (e.target.files.length) processQueue(e.target.files);
   e.target.value = '';
+});
+
+document.getElementById('pdfBtn').addEventListener('click', () => {
+  document.getElementById('pdfInput').click();
+});
+
+document.getElementById('pdfInput').addEventListener('change', e => {
+  if (e.target.files.length) processQueue(e.target.files);
+  e.target.value = '';
+});
+
+document.getElementById('queueClose').addEventListener('click', () => {
+  document.getElementById('queueSection').style.display = 'none';
 });
 
 document.getElementById('addBtn').addEventListener('click', () => openModal());
@@ -558,15 +595,8 @@ document.getElementById('apiKeyClearBtn').addEventListener('click', () => {
   toast('API-Key gelöscht'); updateApiKeyBtn();
 });
 
-function updateApiKeyBtn() {
-  const btn = document.getElementById('apiKeyBtn');
-  btn.textContent = getApiKey() ? '🔑 API-Key ✓' : '🔑 API-Key';
-  btn.style.color = getApiKey() ? 'var(--success)' : '';
-}
-
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeApiKeyModal(); } });
 
-// ── Init ───────────────────────────────────────────────────────────────────
 document.getElementById('version').textContent = VERSION;
 updateApiKeyBtn();
 render();
