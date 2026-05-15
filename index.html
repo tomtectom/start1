@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flugtagebuch</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">✈ Flugtagebuch</div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Drop Zone -->
+    <section class="drop-section">
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon">📂</div>
+        <p class="drop-title">CSV oder JSON hierher ziehen</p>
+        <p class="drop-sub">oder <label class="file-link" for="fileInput">Datei auswählen</label></p>
+        <input type="file" id="fileInput" accept=".csv,.json" hidden />
+        <p class="drop-hint">Unterstützte Spalten: Datum · Flugnummer · Von · Nach · Abflug · Ankunft · Dauer · Airline · Flugzeug · Sitz · Klasse</p>
+      </div>
+      <button class="btn-primary" id="addBtn">+ Flug hinzufügen</button>
+    </section>
+
+    <!-- Filter Bar -->
+    <section class="filter-bar" id="filterBar" style="display:none">
+      <input type="text" id="searchInput" placeholder="Suchen (Airport, Airline …)" />
+      <select id="yearFilter"><option value="">Alle Jahre</option></select>
+      <button class="btn-ghost" id="exportBtn">⬇ CSV Export</button>
+      <button class="btn-ghost danger" id="clearBtn">🗑 Alle löschen</button>
+    </section>
+
+    <!-- Table -->
+    <section class="table-section" id="tableSection" style="display:none">
+      <div class="table-wrap">
+        <table id="flightTable">
+          <thead>
+            <tr>
+              <th data-col="date" class="sortable">Datum <span class="sort-icon">↕</span></th>
+              <th data-col="flight">Flug</th>
+              <th data-col="from" class="sortable">Von <span class="sort-icon">↕</span></th>
+              <th data-col="to" class="sortable">Nach <span class="sort-icon">↕</span></th>
+              <th data-col="dep">Abflug</th>
+              <th data-col="arr">Ankunft</th>
+              <th data-col="dur" class="sortable">Dauer <span class="sort-icon">↕</span></th>
+              <th data-col="airline">Airline</th>
+              <th data-col="aircraft">Flugzeug</th>
+              <th data-col="seat">Sitz</th>
+              <th data-col="class">Klasse</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="flightBody"></tbody>
+        </table>
+      </div>
+      <p class="table-count" id="tableCount"></p>
+    </section>
+
+    <!-- Empty State -->
+    <section class="empty-state" id="emptyState">
+      <div class="empty-icon">🛫</div>
+      <p>Noch keine Flüge. Datei hochladen oder manuell hinzufügen.</p>
+    </section>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle">Flug hinzufügen</h2>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+      <form id="flightForm" class="modal-body">
+        <div class="form-row">
+          <label>Datum *<input type="date" name="date" required /></label>
+          <label>Flugnummer<input type="text" name="flight" placeholder="LH400" /></label>
+        </div>
+        <div class="form-row">
+          <label>Von (IATA) *<input type="text" name="from" placeholder="FRA" maxlength="4" required /></label>
+          <label>Nach (IATA) *<input type="text" name="to" placeholder="JFK" maxlength="4" required /></label>
+        </div>
+        <div class="form-row">
+          <label>Abflug<input type="time" name="dep" /></label>
+          <label>Ankunft<input type="time" name="arr" /></label>
+          <label>Dauer<input type="text" name="dur" placeholder="9h 15m" /></label>
+        </div>
+        <div class="form-row">
+          <label>Airline<input type="text" name="airline" placeholder="Lufthansa" /></label>
+          <label>Flugzeug<input type="text" name="aircraft" placeholder="A380" /></label>
+        </div>
+        <div class="form-row">
+          <label>Sitz<input type="text" name="seat" placeholder="32A" /></label>
+          <label>Klasse<select name="class">
+            <option value="">–</option>
+            <option>Economy</option>
+            <option>Premium Economy</option>
+            <option>Business</option>
+            <option>First</option>
+          </select></label>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" id="modalCancelBtn">Abbrechen</button>
+          <button type="submit" class="btn-primary" id="modalSaveBtn">Speichern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

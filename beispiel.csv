@@ -1,0 +1,6 @@
+Datum;Flugnummer;Von;Nach;Abflug;Ankunft;Dauer;Airline;Flugzeug;Sitz;Klasse
+2024-03-15;LH400;FRA;JFK;10:30;13:45;;Lufthansa;A380;32A;Economy
+2024-05-02;OS066;VIE;BKK;21:15;11:30;;Austrian Airlines;B777;14C;Business
+2024-07-20;FR1234;MUC;BCN;06:50;08:40;;Ryanair;B737;3A;Economy
+2024-09-10;EK043;DUS;DXB;13:30;23:15;;Emirates;A380;22D;Economy
+2024-11-28;LX196;ZRH;SIN;21:40;17:20;;Swiss;A350;41B;Premium Economy
