@@ -21,13 +21,13 @@
   </header>
 
   <main>
-    <!-- Drop Zone -->
     <section class="drop-section">
       <div class="drop-zone" id="dropZone">
         <div class="drop-icon">📂</div>
         <p class="drop-title">Bordkarte, PDF oder Foto hierher</p>
         <p class="drop-sub">oder <label class="file-link" for="fileInput">Datei auswählen</label></p>
         <input type="file" id="fileInput" accept=".pdf,.csv,.json,image/*" hidden multiple />
+        <input type="file" id="pdfInput" accept=".pdf" hidden multiple />
         <div class="drop-badges">
           <span class="format-badge ai">🤖 Foto / Scan</span>
           <span class="format-badge ai">📄 PDF</span>
@@ -36,10 +36,20 @@
         </div>
         <p class="drop-hint">Fotos &amp; PDFs werden per KI ausgelesen · CSV/JSON direkt importiert</p>
       </div>
-      <button class="btn-primary" id="addBtn">+ Flug hinzufügen</button>
+      <div class="drop-actions">
+        <button class="btn-primary" id="addBtn">+ Flug hinzufügen</button>
+        <button class="btn-pdf" id="pdfBtn">📄 Alle PDFs auswählen</button>
+      </div>
     </section>
 
-    <!-- Filter Bar -->
+    <section class="queue-section" id="queueSection" style="display:none">
+      <div class="queue-header">
+        <span class="queue-title">Verarbeitung</span>
+        <button class="queue-close" id="queueClose">✕</button>
+      </div>
+      <ul class="queue-list" id="queueList"></ul>
+    </section>
+
     <section class="filter-bar" id="filterBar" style="display:none">
       <input type="text" id="searchInput" placeholder="Suchen (Airport, Airline …)" />
       <select id="yearFilter"><option value="">Alle Jahre</option></select>
@@ -47,7 +57,6 @@
       <button class="btn-ghost danger" id="clearBtn">🗑 Alle löschen</button>
     </section>
 
-    <!-- Table -->
     <section class="table-section" id="tableSection" style="display:none">
       <div class="table-wrap">
         <table id="flightTable">
@@ -73,22 +82,12 @@
       <p class="table-count" id="tableCount"></p>
     </section>
 
-    <!-- Empty State -->
     <section class="empty-state" id="emptyState">
       <div class="empty-icon">🛫</div>
       <p>Noch keine Flüge. Datei hochladen oder manuell hinzufügen.</p>
     </section>
   </main>
 
-  <!-- Loading Overlay -->
-  <div class="loading-overlay" id="loadingOverlay" style="display:none">
-    <div class="loading-box">
-      <div class="spinner"></div>
-      <p class="loading-text" id="loadingText">KI liest Bordkarte aus…</p>
-    </div>
-  </div>
-
-  <!-- Flight Modal -->
   <div class="modal-backdrop" id="modalBackdrop" style="display:none">
     <div class="modal">
       <div class="modal-header">
@@ -131,7 +130,6 @@
     </div>
   </div>
 
-  <!-- API Key Modal -->
   <div class="modal-backdrop" id="apiKeyBackdrop" style="display:none">
     <div class="modal">
       <div class="modal-header">
@@ -152,7 +150,6 @@
     </div>
   </div>
 
-  <!-- Toast -->
   <div class="toast" id="toast"></div>
 
   <script src="app.js"></script>
