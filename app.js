@@ -523,6 +523,76 @@ document.getElementById('pdfInput').addEventListener('change', e => {
   e.target.value = '';
 });
 
+// ── Google Drive ───────────────────────────────────────────────────────────
+function extractGDriveId(url) {
+  let m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  m = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  return null;
+}
+
+async function handleGDriveLink() {
+  const url = document.getElementById('gdriveInput').value.trim();
+  if (!url) { toast('Bitte Google Drive Link einfügen', 'error'); return; }
+
+  const id = extractGDriveId(url);
+  if (!id) { toast('Link nicht erkannt – bitte "Teilen"-Link von Google Drive', 'error'); return; }
+
+  const downloadUrl = `https://drive.google.com/uc?export=download&id=${id}`;
+
+  // Show queue with a placeholder entry
+  const section = document.getElementById('queueSection');
+  const list = document.getElementById('queueList');
+  section.style.display = '';
+  list.innerHTML = `<li class="queue-item">
+    <span class="queue-item-name">Google Drive PDF</span>
+    <span class="queue-item-status processing">🔄 Wird geladen…</span>
+  </li>`;
+
+  try {
+    const resp = await fetch(downloadUrl);
+    if (!resp.ok) throw new Error('Datei nicht abrufbar (nicht öffentlich geteilt?)');
+    const blob = await resp.blob();
+    const file = new File([blob], 'drive.pdf', { type: 'application/pdf' });
+
+    list.innerHTML = `<li class="queue-item">
+      <span class="queue-item-name">Google Drive PDF</span>
+      <span class="queue-item-status processing">🔄 KI liest PDF…</span>
+    </li>`;
+
+    const text = await extractPDFText(file);
+    if (text.length < 30) throw new Error('PDF-Inhalt nicht lesbar');
+
+    const parsed = await claudeCall([{ type: 'text', text: CLAUDE_PROMPT + '\n\nDokumentinhalt:\n' + text }]);
+    const normalized = parsed.map(f => normalizeFlight(f));
+
+    if (normalized.length) {
+      flights = [...flights, ...normalized];
+      save(); render();
+      list.innerHTML = `<li class="queue-item">
+        <span class="queue-item-name">Google Drive PDF</span>
+        <span class="queue-item-status done">✅ ${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} importiert</span>
+      </li>`;
+      document.getElementById('gdriveInput').value = '';
+      toast(`${normalized.length} Flug${normalized.length !== 1 ? 'e' : ''} aus Google Drive importiert`, 'success');
+    } else {
+      throw new Error('Keine Flugdaten erkannt');
+    }
+  } catch (err) {
+    list.innerHTML = `<li class="queue-item">
+      <span class="queue-item-name">Google Drive PDF</span>
+      <span class="queue-item-status error">❌ ${err.message}</span>
+    </li>`;
+    toast('Fehler: ' + err.message, 'error');
+  }
+}
+
+document.getElementById('gdriveBtn').addEventListener('click', handleGDriveLink);
+document.getElementById('gdriveInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleGDriveLink();
+});
+
 document.getElementById('queueClose').addEventListener('click', () => {
   document.getElementById('queueSection').style.display = 'none';
 });
