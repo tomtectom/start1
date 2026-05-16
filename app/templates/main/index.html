@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}{{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="placeholder-container">
+  <div class="placeholder-card">
+    <div class="placeholder-icon">🚀</div>
+    <h2>Willkommen, {{ current_user.display_name }}!</h2>
+    <p>Der Inhalt der Anwendung wird hier erscheinen.</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Anmelden – {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-logo">🔑</div>
+    <h1 class="auth-title">Anmelden</h1>
+
+    <form method="POST" class="auth-form" novalidate>
+      <div class="form-group">
+        <label for="email">E-Mail</label>
+        <input type="email" id="email" name="email"
+               placeholder="deine@email.de" required autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Passwort</label>
+        <div class="input-wrapper">
+          <input type="password" id="password" name="password"
+                 placeholder="Passwort" required autocomplete="current-password" />
+          <button type="button" class="toggle-pw" data-target="password">👁</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="checkbox-label">
+          <input type="checkbox" name="remember" /> Angemeldet bleiben
+        </label>
+        <a href="{{ url_for('auth.reset_request') }}" class="link-muted">Passwort vergessen?</a>
+      </div>
+
+      <button type="submit" class="btn-primary btn-full">Anmelden</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

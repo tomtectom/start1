@@ -1,0 +1,21 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - app_data:/app/instance   # persistente SQLite-Datenbank
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: sqlite:////app/instance/app.db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/auth/login')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  app_data:

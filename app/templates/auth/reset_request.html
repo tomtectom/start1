@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Passwort zurücksetzen – {{ config.APP_NAME }}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="auth-logo">📧</div>
+    <h1 class="auth-title">Passwort vergessen?</h1>
+    <p class="auth-subtitle">Gib deine E-Mail-Adresse ein. Wir senden dir einen Reset-Link.</p>
+
+    <form method="POST" class="auth-form" novalidate>
+      <div class="form-group">
+        <label for="email">E-Mail</label>
+        <input type="email" id="email" name="email"
+               placeholder="deine@email.de" required autocomplete="email" />
+      </div>
+
+      <button type="submit" class="btn-primary btn-full">Reset-Link senden</button>
+    </form>
+
+    <p class="auth-footer">
+      <a href="{{ url_for('auth.login') }}" class="link-muted">← Zurück zur Anmeldung</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+    .card { background: #fff; max-width: 480px; margin: 0 auto; border-radius: 12px;
+            padding: 40px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+    h1 { color: #1a1a2e; font-size: 22px; margin: 0 0 16px; }
+    p { color: #444; line-height: 1.6; }
+    .btn { display: inline-block; background: #4f46e5; color: #fff; text-decoration: none;
+           padding: 12px 28px; border-radius: 8px; font-weight: bold; margin: 20px 0; }
+    .note { font-size: 13px; color: #888; }
+    .url { word-break: break-all; color: #4f46e5; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🔒 Passwort zurücksetzen</h1>
+    <p>Hallo {{ user.display_name }},</p>
+    <p>du hast einen Passwort-Reset für <strong>{{ app_name }}</strong> angefordert.</p>
+    <p>Klicke auf den Button, um ein neues Passwort zu setzen:</p>
+    <a href="{{ reset_url }}" class="btn">Passwort zurücksetzen</a>
+    <p class="note">Der Link ist <strong>1 Stunde</strong> gültig.</p>
+    <p class="note">Direktlink:<br /><span class="url">{{ reset_url }}</span></p>
+    <p class="note">Falls du keinen Reset angefordert hast, ignoriere diese E-Mail.</p>
+  </div>
+</body>
+</html>

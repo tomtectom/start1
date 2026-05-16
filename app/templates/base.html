@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}{{ config.APP_NAME }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if current_user.is_authenticated %}
+  <nav class="navbar">
+    <div class="nav-brand">{{ config.APP_NAME }}</div>
+    <div class="nav-links">
+      <a href="{{ url_for('main.index') }}">Home</a>
+      <a href="{{ url_for('auth.change_password') }}">Passwort ändern</a>
+      <a href="{{ url_for('auth.logout') }}">Abmelden</a>
+      <span class="nav-user">{{ current_user.display_name }}</span>
+    </div>
+  </nav>
+  {% endif %}
+
+  <div class="flash-container">
+    {% for category, message in get_flashed_messages(with_categories=true) %}
+    <div class="flash flash--{{ category }}">
+      <span>{{ message }}</span>
+      <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+    </div>
+    {% endfor %}
+  </div>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
